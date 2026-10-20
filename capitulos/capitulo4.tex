@@ -1,0 +1,259 @@
+% ==============================================================================
+% CAPÍTULO 4: CRIPTOGRAFIA, HASH E TÉCNICAS DE ANONIMIZAÇÃO DE DADOS
+% ==============================================================================
+
+\begin{center}
+\setstretch{1.0}
+\textbf{\fontsize{14}{16}\selectfont CAPÍTULO 4}
+
+\vspace{0.5em}
+
+\textbf{\fontsize{14}{16}\selectfont CRIPTOGRAFIA, HASH E TÉCNICAS DE PSEUDONIMIZAÇÃO E ANONIMIZAÇÃO EM SGBDs}
+\end{center}
+
+\vspace{1.5em}
+
+\section*{1. CONTEXTUALIZAÇÃO DO TEMA E A IMPORTÂNCIA DO APRENDIZADO}
+
+A segurança lógica e os controles de acesso estudados no Capítulo 3 protegem o banco de dados contra operações ilegítimas intermediadas pelo próprio mecanismo do SGBD. Contudo, em incidentes cibernéticos de alta gravidade, os atacantes frequentemente ultrapassam a camada do software de banco: eles realizam a exfiltração física de arquivos de disco (como as tabelas em formato \texttt{.ibd} do InnoDB), obtêm cópias desprotegidas de segurança (\textit{backups}) ou interceptam canais de comunicação desprovidos de proteção (STALLINGS; BROWN, 2018).
+
+Diante de um vazamento físico ou acesso indevido à infraestrutura de armazenamento, as travas de autenticação e os privilégios tornam-se inócuos. É nesse ponto que a \textbf{Criptografia em Repouso} (\textit{Encryption at Rest}), as \textbf{Funções de Resumo Criptográfico (Hash)} e as \textbf{Técnicas de Transformação de Dados} assumem papel decisivo. Dominar essas técnicas é obrigatório para engenheiros de software, administradores de bancos de dados e profissionais de segurança que necessitam resguardar a confidencialidade das informações mesmo diante de brechas de infraestrutura.
+
+\subsection*{1.1. A Problemática Crítica da Proteção Inadequada de Dados}
+
+A ausência ou a implementação incorreta de mecanismos criptográficos no SGBD gera vulnerabilidades severas amplamente documentadas no mercado:
+\begin{itemize}
+    \item \textbf{A Falácia da Proteção Exclusiva por Credenciais:} Se os dados forem armazenados em texto claro (\textit{plaintext}), qualquer administrador de sistemas com acesso ao sistema operacional subjacente, qualquer operador de nuvem ou qualquer invasor que obtenha uma cópia do arquivo de backup terá acesso irrestrito aos segredos corporativos e dados sensíveis dos clientes.
+    \item \textbf{O Erro Conceitual entre Criptografia e Hash:} Uma das falhas mais graves na engenharia de software ocorre quando desenvolvedores confundem os propósitos de cifras simétricas e funções hash. Armazenar senhas com criptografia reversível (em vez de hash unidirecional resistente) permite que um atacante que descubra a chave decifre compulsoriamente todas as credenciais da organização.
+    \item \textbf{A Vulnerabilidade de Hashes sem Sal (\textit{Salt}):} O armazenamento de resumos criptográficos simples (como MD5 ou SHA-256 puro) sem adição de sal pseudoaleatório expõe o banco de dados a ataques instantâneos por dicionário e tabelas arco-íris (\textit{rainbow tables}), onde senhas comuns são descobertas em frações de segundo.
+    \item \textbf{Exposição Excessiva em Ambientes Analíticos e BI:} É prática recorrente transferir bases de dados completas de produção para ambientes de teste, desenvolvimento e \textit{Business Intelligence} (BI). A exposição de nomes civis, CPFs e prontuários médicos a analistas que necessitam apenas de tendências estatísticas multiplica desnecessariamente a superfície de risco de vazamentos.
+    \item \textbf{Corrupção de Dados por Erro de Tipagem:} Um erro técnico clássico no MySQL consiste em armazenar dados cifrados em colunas do tipo \texttt{VARCHAR}. Como a saída de um algoritmo de criptografia simétrica consiste em uma sequência de bytes arbitrários, caracteres de escape e bytes nulos corrompem os dados textuais, inviabilizando a decifração posterior da informação original.
+\end{itemize}
+
+O aprendizado deste capítulo instrumentaliza o leitor a selecionar a técnica matemática e arquitetural adequada para cada requisito de negócio, garantindo a proteção dos dados em todo o seu ciclo de vida.
+
+\newpage
+
+\section*{2. FUNDAMENTAÇÃO TEÓRICA: CRIPTOGRAFIA VERSUS FUNÇÃO HASH}
+
+Para construir soluções robustas, o engenheiro de dados deve dominar as fronteiras conceituais e operacionais entre criptografia e funções de dispersão (KAUFMAN; PERLMAN; SPECINER, 2002; FERGUSON; SCHNEIER; KOHNO, 2010):
+
+\begin{table}[h!]
+\centering
+\small
+\begin{tabular}{|p{3.2cm}|p{5.5cm}|p{5.5cm}|}
+\hline
+\textbf{Característica} & \textbf{Criptografia Simétrica (ex.: AES)} & \textbf{Função Hash (ex.: SHA-256)} \\ \hline
+\textbf{Direcionalidade} & \textbf{Bidirecional (Reversível):} Transforma texto claro em texto cifrado e restaura o conteúdo original mediante a chave. & \textbf{Unidirecional (Irreversível):} Gera uma impressão digital de tamanho fixo. Não existe operação matemática de volta. \\ \hline
+\textbf{Dependência de Segredo} & Exige a custódia rigorosa de uma \textbf{chave criptográfica} secreta. & Algoritmo puramente matemático; não depende de chaves (exceto se operado como HMAC). \\ \hline
+\textbf{Finalidade Primária} & Proteger a confidencialidade de dados que precisarão ser lidos no futuro (ex.: dados clínicos). & Validação de integridade de dados e verificação de senhas sem necessidade de conhecê-las. \\ \hline
+\textbf{Efeito Avalanche} & Presente por blocos de modo de operação. & Estrito: a alteração de um único bit na entrada altera cerca de 50\% dos bits da saída. \\ \hline
+\end{tabular}
+\caption{Diferenças estruturais entre criptografia simétrica e funções hash.}
+\end{table}
+
+\subsection*{2.1. O Uso Mandatório de Resumo Criptográfico com Sal (Salt)}
+
+No armazenamento seguro de senhas, a adição de uma cadeia pseudoaleatória exclusiva (\textit{salt}) a cada entrada inviabiliza que invasores utilizem bancos de dados de hashes pré-computados:
+
+\begin{lstlisting}
+-- Demonstracao conceitual de hash salgado
+SET @sal = 'x#9K$qL@2026';
+SELECT SHA2(CONCAT('SenhaDoUsuario', @sal), 256) AS hash_blindado;
+\end{lstlisting}
+
+\newpage
+
+\section*{3. IMPLEMENTAÇÃO DE CRIPTOGRAFIA SIMÉTRICA COM AES NO MYSQL}
+
+O padrão \textbf{AES} (\textit{Advanced Encryption Standard}), formalizado pelo NIST através do FIPS 197 (NIST, 2001), é a cifra de bloco simétrica de referência adotada internacionalmente por corporações e governos. No MySQL, o algoritmo opera de modo nativo através das funções \texttt{AES\_ENCRYPT()} e \texttt{AES\_DECRYPT()}.
+
+\subsection*{3.1. Requisitos de Tipagem: O Uso Exclusivo de VARBINARY}
+
+Colunas destinadas ao armazenamento de saídas criptográficas devem ser declaradas estritamente com os tipos binários \textbf{\texttt{VARBINARY}} ou \textbf{\texttt{BLOB}}. A utilização de tipos textuais (\texttt{VARCHAR}) acarreta corrupção irreversível da cifra devido ao tratamento de tabelas de caracteres (\textit{charsets}) e caracteres de controle (ORACLE, 2024).
+
+\subsection*{3.2. Modelagem e Inserção de Dados Sensíveis}
+
+Considere uma relação cadastral contendo informações clínicas em que os diagnósticos representam dados de altíssima sensibilidade:
+
+\begin{lstlisting}
+USE escola;
+
+CREATE TABLE titular (
+    id_titular INT PRIMARY KEY AUTO_INCREMENT,
+    nome VARCHAR(80) NOT NULL,
+    cpf CHAR(11) UNIQUE NOT NULL,
+    email VARCHAR(100) NOT NULL,
+    cidade VARCHAR(40),
+    saude VARBINARY(255), -- Tipagem binaria mandatoria para cifra AES
+    consentimento TINYINT(1) DEFAULT 0
+);
+\end{lstlisting}
+
+\subsection*{3.3. Ciclo de Criptografia e Consulta Condicional}
+
+Em ambientes de produção, a chave criptográfica é gerida em cofres de chaves (\textit{Key Management Services} -- KMS). No laboratório a seguir, derivamos uma chave de sessão de 256 bits:
+
+\begin{lstlisting}
+-- Derivacao de chave a partir de um segredo mestre
+SET @k = SHA2('chave-mestra-unirv-2026', 256);
+
+-- Insercao com criptografia do dado de saude
+INSERT INTO titular (nome, cpf, email, cidade, saude, consentimento) VALUES
+('Ana Paula', '11111111111', 'ana@mail.com', 'Rio Verde', AES_ENCRYPT('asma cronica', @k), 1),
+('Beatriz Costa', '22222222222', 'bia@mail.com', 'Jatai', AES_ENCRYPT('rinite alergica', @k), 0);
+\end{lstlisting}
+
+\subsubsection*{3.3.1. Consulta Desprovida da Chave Criptográfica}
+
+Caso a tabela seja consultada sem o fornecimento da chave:
+\begin{lstlisting}
+SELECT nome, saude FROM titular;
+\end{lstlisting}
+O SGBD exibe apenas sequências binárias inteligíveis exclusivamente como bytes brutos (ex.: \texttt{0x7B28A94F1C...}). O dado médico permanece inviolado.
+
+\subsubsection*{3.3.2. Consulta Autorizada com a Chave e Coerção de Tipo}
+
+A aplicação devidamente autorizada que detém a posse da chave decifra e converte os bytes em cadeia legível com \texttt{CAST(... AS CHAR)}:
+
+\begin{lstlisting}
+SELECT nome,
+       CAST(AES_DECRYPT(saude, @k) AS CHAR) AS diagnostico_saude
+FROM titular;
+\end{lstlisting}
+
+\newpage
+
+\section*{4. TÉCNICAS DE PSEUDONIMIZAÇÃO EM ENGENHARIA DE DADOS}
+
+A \textbf{Pseudonimização} é o tratamento de dados pessoais por meio do qual um registro perde a possibilidade de associação direta ou indireta a um indivíduo específico, senão pelo uso de informação adicional mantida separadamente pelo controlador em ambiente controlado e isolado (BRASIL, 2018; ANPD, 2023).
+
+Trata-se de um processo \textbf{reversível}, porém essa reversibilidade fica estritamente restrita a quem possui a custódia formal da chave de correlação ou tabela de mapeamento.
+
+\subsection*{4.1. Arquitetura com Tabela de Mapeamento Separada}
+
+\begin{lstlisting}
+CREATE TABLE mapa_pseudonimo (
+    codigo CHAR(10) PRIMARY KEY,
+    id_titular INT UNIQUE NOT NULL,
+    FOREIGN KEY (id_titular) REFERENCES titular(id_titular)
+    ON DELETE CASCADE
+);
+\end{lstlisting}
+
+\subsection*{4.2. Geração Algorítmica dos Códigos Pseudonimizados}
+
+Os identificadores artificiais são gerados aplicando resumo criptográfico sobre o CPF concatenado a um segredo de sal institucional:
+
+\begin{lstlisting}
+SET @sal = '#segredo-institucional-2026';
+
+INSERT INTO mapa_pseudonimo (codigo, id_titular)
+SELECT LEFT(SHA2(CONCAT(cpf, @sal), 256), 10), id_titular
+FROM titular;
+
+SELECT * FROM mapa_pseudonimo;
+\end{lstlisting}
+
+\subsection*{4.3. Criação de Visão Analítica para Inteligência de Negócios (BI)}
+
+Equipes de cientistas de dados e analistas de BI necessitam realizar correlações demográficas sem conhecer a identidade civil dos indivíduos:
+
+\begin{lstlisting}
+CREATE VIEW analise_pseudonimizada AS
+SELECT m.codigo, t.cidade
+FROM titular t
+JOIN mapa_pseudonimo m USING (id_titular);
+
+SELECT * FROM analise_pseudonimizada;
+\end{lstlisting}
+
+O relatório expõe apenas códigos abstratos e a cidade, eliminando o risco de exposição de nomes e documentos civis em relatórios gerenciais.
+
+\newpage
+
+\section*{5. ANONIMIZAÇÃO DEFINITIVA E MASCARAMENTO DINÂMICO}
+
+\subsection*{5.1. Anonimização: A Transformação Irreversível}
+
+A \textbf{Anonimização} ocorre quando um dado pessoal é submetido a procedimentos técnicos em decorrência dos quais o titular não pode mais ser identificado por nenhum meio razoável disponível (ANPD, 2023). Ao contrário da pseudonimização, a anonimização é um processo \textbf{definitivo e sem volta}.
+
+Em bancos relacionais, a anonimização é realizada principalmente por meio de transformações agregadas que descartam identificadores individuais e mapas relacionais:
+
+\begin{lstlisting}
+-- Geracao de relatorio inteiramente anonimizado
+CREATE TABLE relatorio_anonimo AS
+SELECT cidade, COUNT(*) AS total_titulares
+FROM titular
+GROUP BY cidade;
+
+SELECT * FROM relatorio_anonimo;
+\end{lstlisting}
+O resultado reflete apenas quantitativos geográficos agregados. É matematicamente impossível reverter a contagem para identificar os indivíduos que compõem o grupo.
+
+\subsection*{5.2. Mascaramento Dinâmico de Dados (Data Masking)}
+
+O mascaramento dinâmico consiste na exibição ofuscada de campos confidenciais em interfaces operacionais e centrais de atendimento (SAC), em estrita observância ao \textbf{Princípio da Minimização} (necessidade estrita de visualização para o atendimento).
+
+\begin{lstlisting}
+CREATE VIEW titular_mascarado AS
+SELECT nome,
+       CONCAT(LEFT(email, 2), '***@', SUBSTRING_INDEX(email, '@', -1)) AS email,
+       CONCAT('*******', RIGHT(cpf, 4)) AS cpf
+FROM titular;
+
+SELECT * FROM titular_mascarado;
+\end{lstlisting}
+
+\textbf{Resultado Gerado para a Interface de Atendimento:}
+\begin{lstlisting}
++---------------+----------------+-------------+
+| nome          | email          | cpf         |
++---------------+----------------+-------------+
+| Ana Paula     | an***@mail.com | *******1111 |
+| Beatriz Costa | bi***@mail.com | *******2222 |
++---------------+----------------+-------------+
+\end{lstlisting}
+
+O atendente visualiza os dados suficientes para conferência do titular no atendimento telefônico, sem expor o e-mail completo ou o CPF a olhares indiscretos ou captura indevida.
+
+\newpage
+
+\section*{6. SÍNTESE DO CAPÍTULO E QUADRO COMPARATIVO}
+
+\begin{table}[h!]
+\centering
+\small
+\begin{tabular}{|l|l|l|l|}
+\hline
+\textbf{Técnica} & \textbf{Reversibilidade} & \textbf{Mecanismo SQL Típico} & \textbf{Caso de Uso Primário} \\ \hline
+\textbf{Hash} & Não Reversível & \texttt{SHA2(CONCAT(dado, sal), 256)} & Senhas, integridade de arquivos \\ \hline
+\textbf{Criptografia} & Reversível (com chave) & \texttt{AES\_ENCRYPT, AES\_DECRYPT} & Dados sensíveis em repouso \\ \hline
+\textbf{Pseudonimização} & Reversível (com mapa) & \texttt{Tabela satélite + Código} & Bases analíticas e pesquisa \\ \hline
+\textbf{Anonimização} & Irreversível & \texttt{GROUP BY, COUNT(*)} & Estatísticas e dados abertos \\ \hline
+\textbf{Mascaramento} & Visual / Parcial & \texttt{CONCAT, LEFT, SUBSTRING} & Telas de SAC e atendimento \\ \hline
+\end{tabular}
+\caption{Quadro comparativo de técnicas de preservação de dados.}
+\end{table}
+
+\section*{REFERÊNCIAS DO CAPÍTULO}
+
+\noindent ANPD. AUTORIDADE NACIONAL DE PROTEÇÃO DE DADOS. \textbf{Guia Orientativo: Tratamento de Dados Pessoais para Fins Acadêmicos e Estudos por Órgão de Pesquisa}. Brasília: ANPD, 2023.
+
+\vspace{0.8em}
+\noindent BRASIL. \textbf{Lei nº 13.709, de 14 de agosto de 2018}. Lei Geral de Proteção de Dados Pessoais (LGPD). Diário Oficial da União: seção 1, Brasília, DF, 15 ago. 2018.
+
+\vspace{0.8em}
+\noindent FERGUSON, N.; SCHNEIER, B.; KOHNO, T. \textbf{Cryptography Engineering: Design Principles and Practical Applications}. Indianapolis: Wiley Publishing, 2010.
+
+\vspace{0.8em}
+\noindent KAUFMAN, C.; PERLMAN, R.; SPECINER, M. \textbf{Network Security: Private Communication in a Public World}. 2. ed. Upper Saddle River: Prentice Hall, 2002.
+
+\vspace{0.8em}
+\noindent NIST. NATIONAL INSTITUTE OF STANDARDS AND TECHNOLOGY. \textbf{FIPS PUB 197: Advanced Encryption Standard (AES)}. Gaithersburg: U.S. Department of Commerce, 2001.
+
+\vspace{0.8em}
+\noindent ORACLE. \textbf{MySQL 8.0 Reference Manual: Encryption and Compression Functions}. Redwood City: Oracle Corporation, 2024. Disponível em: \url{https://dev.mysql.com/doc/refman/8.0/en/}. Acesso em: 13 out. 2026.
+
+\vspace{0.8em}
+\noindent STALLINGS, W.; BROWN, L. \textbf{Segurança de Computadores: Princípios e Práticas}. 4. ed. Rio de Janeiro: GEN LTC, 2018.

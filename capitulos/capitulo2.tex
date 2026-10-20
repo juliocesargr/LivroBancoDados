@@ -1,0 +1,282 @@
+% ==============================================================================
+% CAPÍTULO 2: INTEGRIDADE REFERENCIAL E AUTOMAÇÃO PROCEDURAL COM TRIGGERS
+% ==============================================================================
+
+\begin{center}
+\setstretch{1.0}
+\textbf{\fontsize{14}{16}\selectfont CAPÍTULO 2}
+
+\vspace{0.5em}
+
+\textbf{\fontsize{14}{16}\selectfont INTEGRIDADE REFERENCIAL E REGRAS ATIVAS DE NEGÓCIO COM GATILHOS (TRIGGERS)}
+\end{center}
+
+\vspace{1.5em}
+
+\section*{1. CONTEXTUALIZAÇÃO DO TEMA E A IMPORTÂNCIA DO APRENDIZADO}
+
+A arquitetura de um Sistema Gerenciador de Banco de Dados Relacional atinge sua maturidade quando as tabelas deixam de ser ilhas isoladas de informação e passam a refletir a complexa rede de relacionamentos existente no mundo real. Enquanto as restrições de domínio e entidade apresentadas no Capítulo 1 blindam colunas e tuplas individuais, a \textbf{Integridade Referencial} e a \textbf{Automação Procedural via Gatilhos (Triggers)} constituem a espinha dorsal da consistência entre relações interconectadas.
+
+Dominar esses dois pilares é indispensável para o profissional de tecnologia que atua com arquitetura de software, engenharia de dados e infraestrutura corporativa. No ecossistema empresarial, a perda de integridade entre dados associados acarreta prejuízos financeiros diretos, paradas operacionais e severas distorções contábeis.
+
+\subsection*{1.1. A Problemática Crítica da Ausência de Integridade Referencial}
+
+A negligência na implementação formal de chaves estrangeiras e regras ativas introduz patologias graves na base de dados:
+\begin{itemize}
+    \item \textbf{Proliferação de Registros Órfãos:} Quando tabelas dependentes (como itens de venda, parcelas de financiamento ou matrículas acadêmicas) não são formalmente atreladas a uma chave estrangeira, a exclusão acidental ou intencional de um registro pai (como um cliente ou um curso) deixa tuplas filhas desconectadas. O sistema passa a conter vendas faturadas para clientes que não existem, quebrando conciliações financeiras e a emissão de notas fiscais.
+    \item \textbf{Inconsistências em Consultas com Junção (\textit{JOIN}):} Registros órfãos ou chaves desincronizadas corrompem relatórios gerenciais construídos com \texttt{INNER JOIN}, que passam a omitir dados silenciosamente, distorcendo o faturamento reportado à diretoria e a órgãos governamentais.
+    \item \textbf{Destruição em Cascata Descontrolada:} A adoção inadvertida ou ausente de políticas de deleção pode levar a catástrofes: ou o banco impede operações rotineiras sem justificativa clara, ou propaga exclusões em massa (\texttt{CASCADE}) que deletam históricos contratuais vitais por engano.
+\end{itemize}
+
+\subsection*{1.2. A Necessidade de Lógica Ativa: As Limitações das Restrições Estáticas}
+
+Outra problemática fundamental reside no fato de que regras de negócio complexas não podem ser resolvidas apenas com declarações primitivas de chave. Considere validações condicionais dependentes de múltiplos atributos ou que exigem verificações cronológicas (por exemplo: impedir que uma devolução de material ocorra antes da data da sua retirada, ou bloquear saques que ultrapassem um limite diário flutuante).
+
+No padrão ANSI SQL teórico, tais validações gerais deveriam ser suportadas por \textit{ASSERTIONS} globais de esquema (MELTON; SIMON, 2002). No entanto, devido à altíssima complexidade computacional para verificar assertivas a cada instrução de escrita, a imensa maioria dos SGBDs de mercado (incluindo o MySQL) não implementa \textit{ASSERTIONS}. Nesse contexto, o domínio de \textbf{Gatilhos} (\textit{Triggers}) torna-se mandatório: eles representam o mecanismo procedural padrão da indústria para programar a integridade definida pelo usuário e fazer o banco de dados reagir ativamente a violações antes que dados corrompidos sejam gravados.
+
+\newpage
+
+\section*{2. FUNDAMENTAÇÃO TEÓRICA DA INTEGRIDADE REFERENCIAL}
+
+A integridade referencial fundamenta-se no princípio formal de que toda referência cruzada entre duas relações no modelo relacional deve ser plenamente válida e comprovável (CODD, 1970; DATE, 2004). 
+
+Conforme formalizado por Elmasri e Navathe (2011), uma restrição de integridade referencial é especificada entre duas relações: a \textbf{relação referenciadora} ($R_1$, ou tabela filha) e a \textbf{relação referenciada} ($R_2$, ou tabela pai). Uma tupla $t_1$ em $R_1$ que possui um conjunto de atributos de chave estrangeira $FK$ deve satisfazer à condição de que, se o valor de $FK$ não for nulo, esse valor deve coincidir rigorosamente com a chave primária $PK$ de alguma tupla $t_2$ em $R_2$:
+
+\begin{equation}
+    t_1[FK] = t_2[PK] \quad \text{ou} \quad t_1[FK] = \text{NULL}
+\end{equation}
+
+Quando esse predicado é garantido pelo SGBD, o sistema torna-se matematicamente imune ao surgimento de registros órfãos.
+
+\newpage
+
+\section*{3. MECÂNICA DE CHAVES ESTRANGEIRAS E POLÍTICAS REFERENCIAIS}
+
+A declaração de uma chave estrangeira estabelece o vínculo formal de integridade entre duas tabelas no MySQL.
+
+\subsection*{3.1. Políticas de Ação no Descarte e Atualização}
+
+O arquiteto de banco de dados deve prever o que o motor relacional fará caso uma tupla na tabela pai sofra tentativa de exclusão ou alteração. O SQL oferece três políticas fundamentais:
+\begin{enumerate}
+    \item \textbf{\texttt{ON DELETE RESTRICT} / \texttt{NO ACTION} (Padrão):} Veda e cancela a operação no pai enquanto existir qualquer tupla filha associada. É a salvaguarda primária contra deleção acidental de registros mestres.
+    \item \textbf{\texttt{ON DELETE CASCADE}:} Remove compulsoriamente todas as tuplas filhas quando a tupla pai for excluída. Aplica-se a relações de dependência existencial estrita (como itens de uma fatura ou tabelas de mapeamento técnico).
+    \item \textbf{\texttt{ON DELETE SET NULL}:} Desconecta as tuplas filhas da tupla pai, atribuindo \texttt{NULL} à chave estrangeira (exige que a coluna permita nulos).
+\end{enumerate}
+
+\subsection*{3.2. Implementação e Análise de Falha Provocada}
+
+Examinamos a implementação entre a tabela mestre de cursos e a tabela dependente de matrículas:
+
+\begin{lstlisting}
+USE escola;
+
+-- Tabela Pai (Referenciada)
+CREATE TABLE curso (
+    id_curso INT PRIMARY KEY AUTO_INCREMENT,
+    nome VARCHAR(60) NOT NULL
+);
+
+-- Tabela Filha com Chave Estrangeira e Politica RESTRICT
+CREATE TABLE matricula_curso (
+    id_matricula INT PRIMARY KEY AUTO_INCREMENT,
+    id_curso INT NOT NULL,
+    aluno_nome VARCHAR(80) NOT NULL,
+    FOREIGN KEY (id_curso) REFERENCES curso(id_curso)
+    ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+INSERT INTO curso (nome) VALUES ('Engenharia de Software');
+INSERT INTO matricula_curso (id_curso, aluno_nome) VALUES (1, 'Marcos Silva');
+
+-- Tentativa de exclusao do Curso 1 enquanto existirem matriculas ativas
+-- Retorno do SGBD: Error 1451 (23000): Cannot delete or update a parent row: a foreign key constraint fails
+DELETE FROM curso WHERE id_curso = 1;
+\end{lstlisting}
+
+O SGBD cancelou a operação com o Erro 1451, impedindo que o aluno Marcos Silva ficasse órfão no sistema institucional.
+
+\newpage
+
+\section*{4. ARQUITETURA E PROGRAMAÇÃO DE GATILHOS (TRIGGERS)}
+
+Um \textbf{Gatilho} (\textit{Trigger}) em SQL é um bloco de código procedural autônomo, vinculado a uma relação de dados, cuja execução é disparada compulsoriamente pelo motor transacional do SGBD diante de uma instrução DML (\texttt{INSERT}, \texttt{UPDATE} ou \texttt{DELETE}) (MELTON; SIMON, 2002; SILBERSCHATZ; KORTH; SUDARSHAN, 2020).
+
+\subsection*{4.1. Os Quatro Pilares Estruturais de um Gatilho}
+
+\begin{table}[h!]
+\centering
+\small
+\begin{tabular}{|l|p{10cm}|}
+\hline
+\textbf{Pilar} & \textbf{Papel no Ciclo Transacional} \\ \hline
+\textbf{1. Tabela Alvo} & Relação na qual as mutações são monitoradas pelo motor. \\ \hline
+\textbf{2. Evento Disparador} & Operação modificadora: \texttt{INSERT}, \texttt{UPDATE} ou \texttt{DELETE}. \\ \hline
+\textbf{3. Momento de Disparo} & • \texttt{BEFORE}: Executado antes da escrita no log transacional. Essencial para validação, sanitização e cancelamento prévio de operações inválidas.\\
+ & • \texttt{AFTER}: Executado após a gravação da tupla. Ideal para auditoria contínua, replicação e logs históricos. \\ \hline
+\textbf{4. Granularidade} & • \texttt{FOR EACH ROW}: Disparado individualmente para cada tupla processada.\\
+ & • \texttt{FOR EACH STATEMENT}: Disparado uma única vez por comando. \\ \hline
+\end{tabular}
+\caption{Os quatro pilares fundamentais da arquitetura de um gatilho.}
+\end{table}
+
+\subsection*{4.2. As Variáveis de Contexto NEW e OLD}
+
+Em gatilhos linha a linha (\texttt{FOR EACH ROW}), o motor do banco expõe variáveis contextuais em memória:
+\begin{itemize}
+    \item \texttt{NEW}: Permite inspecionar e intervir sobre os novos valores propostos para a tupla (disponível em operações de \texttt{INSERT} e \texttt{UPDATE}).
+    \item \texttt{OLD}: Permite inspecionar o estado prévio dos atributos antes da modificação (disponível em operações de \texttt{UPDATE} e \texttt{DELETE}).
+\end{itemize}
+
+\subsection*{4.3. Delimitadores e Interrupção Transacional com SIGNAL}
+
+Para que blocos procedurais contenham múltiplos comandos terminados em ponto e vírgula, altera-se temporariamente o delimitador da sessão com \texttt{DELIMITER \$\$}. 
+
+Para abortar a transação e notificar a aplicação sobre uma violação de regra de negócio, o gatilho executa \texttt{SIGNAL SQLSTATE '45000'} com a mensagem descritiva (ORACLE, 2024). A classe \texttt{'45000'} é reservada pelo padrão ANSI para representar exceções definidas pelo usuário.
+
+\newpage
+
+\section*{5. ESTUDO DE CASO PRÁTICO: VALIDAÇÃO TEMPORAL DE EMPRÉSTIMOS}
+
+Para ilustrar uma regra de negócio condicional impossível de ser modelada por chaves estáticas simples, examinamos o subsistema de empréstimos.
+
+\subsection*{5.1. Modelagem da Tabela}
+
+\begin{lstlisting}
+CREATE TABLE emprestimo (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    livro VARCHAR(80) NOT NULL,
+    data_retirada DATE NOT NULL,
+    data_devolucao DATE
+);
+\end{lstlisting}
+
+\textbf{Regra de Negócio Formal:} Uma devolução jamais pode possuir data cronologicamente anterior à data de retirada (\texttt{data\_devolucao >= data\_retirada}).
+
+\subsection*{5.2. Construção do Gatilho BEFORE INSERT}
+
+\begin{lstlisting}
+DELIMITER $$
+
+CREATE TRIGGER valida_devolucao
+BEFORE INSERT ON emprestimo
+FOR EACH ROW
+BEGIN
+    -- Validacao condicional comparando os campos do registro NEW proposto
+    IF NEW.data_devolucao IS NOT NULL AND NEW.data_devolucao < NEW.data_retirada THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Data invalida: devolucao anterior a retirada.';
+    END IF;
+END$$
+
+DELIMITER ;
+\end{lstlisting}
+
+\subsection*{5.3. Testes de Laboratório e Análise do Retorno}
+
+\begin{lstlisting}
+-- CASO 1: Transacao cronologicamente valida
+INSERT INTO emprestimo VALUES
+(NULL, 'Dom Casmurro', '2026-09-01', '2026-09-15');
+
+-- CASO 2: Anomalia cronologica intencional (devolucao antes da retirada)
+-- Retorno do motor: Error 1644 (45000): Data invalida: devolucao anterior a retirada.
+INSERT INTO emprestimo VALUES
+(NULL, 'Quincas Borba', '2026-09-10', '2026-09-01');
+\end{lstlisting}
+
+O gatilho operou no estágio \texttt{BEFORE}, impedindo que a incoerência temporal chegasse ao armazenamento físico.
+
+\newpage
+
+\section*{6. DESAFIO PRÁTICO: A REFATORAÇÃO DA TABELA PEDIDO}
+
+Para consolidar as quatro dimensões de integridade estudadas (Domínio, Entidade, Referencial e Definida pelo Usuário), abordamos a refatoração do esquema de pedidos de comércio eletrônico.
+
+\subsection*{6.1. O Ponto de Partida Desprotegido}
+
+\begin{lstlisting}
+CREATE TABLE cliente (
+    id_cliente INT PRIMARY KEY AUTO_INCREMENT,
+    nome VARCHAR(80) NOT NULL
+);
+
+-- Tabela fragilizada sem regras formais
+CREATE TABLE pedido_sem_regras (
+    id INT,
+    id_cliente INT,
+    data_pedido DATE,
+    valor DECIMAL(10,2),
+    status VARCHAR(15)
+);
+\end{lstlisting}
+
+\subsection*{6.2. Resolução do Desafio: Refatoração com Quatro Salvaguardas}
+
+\begin{lstlisting}
+CREATE TABLE pedido (
+    id_pedido INT PRIMARY KEY AUTO_INCREMENT,
+    id_cliente INT NOT NULL,
+    data_pedido DATE NOT NULL,
+    valor DECIMAL(10,2) CHECK (valor > 0),
+    status VARCHAR(15) DEFAULT 'ABERTO',
+    FOREIGN KEY (id_cliente) REFERENCES cliente(id_cliente)
+    ON DELETE RESTRICT ON UPDATE CASCADE
+);
+\end{lstlisting}
+
+\subsection*{6.3. Bateria de Testes do Esquema Refatorado}
+
+\begin{lstlisting}
+INSERT INTO cliente (nome) VALUES ('Central de Suprimentos UniRV');
+
+-- Insercao valida (assume DEFAULT 'ABERTO' e cumpre chave estrangeira)
+INSERT INTO pedido (id_cliente, data_pedido, valor)
+VALUES (1, '2026-10-15', 420.00);
+
+-- TESTE 1: Cliente inexistente (id = 999)
+-- Retorno do motor: Error 1452 (Foreign key constraint fails)
+INSERT INTO pedido (id_cliente, data_pedido, valor)
+VALUES (999, '2026-10-15', 100.00);
+
+-- TESTE 2: Valor negativo ou nulo
+-- Retorno do motor: Error 3819 (Check constraint 'pedido_chk_1' is violated)
+INSERT INTO pedido (id_cliente, data_pedido, valor)
+VALUES (1, '2026-10-15', -50.00);
+\end{lstlisting}
+
+\newpage
+
+\section*{7. SÍNTESE DO CAPÍTULO E QUADRO CONSOLIDADO}
+
+\begin{table}[h!]
+\centering
+\small
+\begin{tabular}{|l|l|l|l|}
+\hline
+\textbf{Restrição} & \textbf{Mecanismo SQL} & \textbf{Natureza} & \textbf{Falha Operacional Evitada} \\ \hline
+\textbf{Domínio} & \texttt{CHECK, NOT NULL} & Declarativa & Preços negativos, valores em branco \\ \hline
+\textbf{Entidade} & \texttt{PK, UNIQUE} & Declarativa & Duplicidade cadastral, ambiguidade \\ \hline
+\textbf{Referencial} & \texttt{FOREIGN KEY, RESTRICT} & Declarativa & Vendas para clientes excluídos, órfãos \\ \hline
+\textbf{Usuário} & \texttt{TRIGGER, SIGNAL} & Procedural & Incoerência temporal, regras complexas \\ \hline
+\end{tabular}
+\caption{Matriz consolidada de restrições de integridade no SGBD.}
+\end{table}
+
+\section*{REFERÊNCIAS DO CAPÍTULO}
+
+\noindent CODD, E. F. A relational model of data for large shared data banks. \textbf{Communications of the ACM}, v. 13, n. 6, p. 377-387, 1970.
+
+\vspace{0.8em}
+\noindent DATE, C. J. \textbf{Introdução a Sistemas de Bancos de Dados}. 8. ed. Rio de Janeiro: Elsevier, 2004.
+
+\vspace{0.8em}
+\noindent ELMASRI, R.; NAVATHE, S. B. \textbf{Sistemas de Banco de Dados}. 6. ed. São Paulo: Pearson Addison Wesley, 2011.
+
+\vspace{0.8em}
+\noindent MELTON, J.; SIMON, A. R. \textbf{SQL: 1999 - Understanding Relational Language Components}. San Francisco: Morgan Kaufmann, 2002.
+
+\vspace{0.8em}
+\noindent ORACLE. \textbf{MySQL 8.0 Reference Manual: Triggers and Stored Programs}. Redwood City: Oracle Corporation, 2024. Disponível em: \url{https://dev.mysql.com/doc/refman/8.0/en/}. Acesso em: 13 out. 2026.
+
+\vspace{0.8em}
+\noindent SILBERSCHATZ, A.; KORTH, H. F.; SUDARSHAN, S. \textbf{Sistema de Banco de Dados}. 7. ed. Rio de Janeiro: GEN LTC, 2020.

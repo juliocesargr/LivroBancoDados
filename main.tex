@@ -1,0 +1,231 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[brazil]{babel}
+\usepackage[T1]{fontenc}
+\usepackage{times}
+\usepackage[a4paper, top=2.5cm, bottom=2.5cm, left=3.0cm, right=3.0cm, headheight=2.3cm, headsep=0.4cm, footskip=1.2cm]{geometry}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{setspace}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{caption}
+\usepackage{xurl}
+\usepackage[colorlinks=true, urlcolor=blue, linkcolor=blue, pdftitle={Integridade, Seguranca e Conformidade com a LGPD em Banco de Dados: Um Guia Pratico com SQL}]{hyperref}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, backgrounds, calc}
+\usepackage{listings}
+\usepackage{amsmath,amssymb}
+
+% Configuração para o pacote listings (exibição de código SQL e comandos)
+\lstset{
+  language=SQL,
+  basicstyle=\ttfamily\fontsize{9}{11}\selectfont,
+  breaklines=true,
+  frame=single,
+  rulecolor=\color{black!30},
+  backgroundcolor=\color{gray!5},
+  keywordstyle=\color{blue!80!black}\bfseries,
+  stringstyle=\color{green!50!black},
+  commentstyle=\color{gray!70}\itshape,
+  showstringspaces=false,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  stepnumber=1,
+  numbersep=8pt,
+  extendedchars=true,
+  literate={á}{{\'a}}1 {é}{{\'e}}1 {í}{{\'i}}1 {ó}{{\'o}}1 {ú}{{\'u}}1 {ã}{{\~a}}1 {õ}{{\~o}}1 {ç}{{\c{c}}}1 {Á}{{\'A}}1 {É}{{\'E}}1 {Í}{{\'I}}1 {Ó}{{\'O}}1 {Ú}{{\'U}}1 {Ã}{{\~A}}1 {Õ}{{\~O}}1 {Ç}{{\c{C}}}1 {à}{{\`a}}1 {À}{{\`A}}1 {ê}{{\^e}}1 {Ê}{{\^E}}1,
+  morekeywords={DELIMITER, SIGNAL, SQLSTATE, MESSAGE_TEXT, TINYINT, VARBINARY, AES_ENCRYPT, AES_DECRYPT, SHA2, JSON_OBJECT, ROLE, CURRENT_USER, SUBSTRING_INDEX, USING, FAILED_LOGIN_ATTEMPTS, PASSWORD_LOCK_TIME, PASSWORD, EXPIRE, INTERVAL, DAY}
+}
+
+% Define blue color matching the header logo style
+\definecolor{editorablue}{RGB}{52, 133, 203}
+
+% Use Times New Roman for URLs
+\urlstyle{same}
+
+% Enable 1.5 line spacing globally
+\setstretch{1.5}
+
+% Set paragraph indent to 1.5 cm and no skip between paragraphs
+\setlength{\parindent}{1.5cm}
+\setlength{\parskip}{0pt}
+
+% Header and Footer setup
+\pagestyle{fancy}
+\fancyhf{}
+\chead{\vspace*{-0.5cm}\includegraphics[height=2.2cm]{logo.png}}
+\rfoot{\fontsize{10}{12}\selectfont editoraomnisscientia.com.br}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% Section formatting: 12pt bold uppercase, left-aligned
+\titleformat{\section}{\normalfont\bfseries\fontsize{12}{14}\selectfont}{\thesection}{1em}{}
+\titlespacing*{\section}{0pt}{14pt}{6pt}
+
+\begin{document}
+
+% ==============================================================================
+% PÁGINA DE TÍTULO / CAPA DO LIVRO
+% ==============================================================================
+
+\begin{center}
+\setstretch{1.3}
+\vspace*{2cm}
+
+\textbf{\fontsize{16}{18}\selectfont INTEGRIDADE, SEGURANÇA E CONFORMIDADE COM A LGPD EM BANCO DE DADOS: UM GUIA PRÁTICO COM SQL}
+
+\end{center}
+
+\vspace{2.5em}
+
+% ==============================================================================
+% SEÇÃO INICIAL: INFORMAÇÕES GERAIS DO LIVRO TÉCNICO
+% ==============================================================================
+
+\begin{center}
+\setstretch{1.0}
+\textbf{\fontsize{12}{14}\selectfont INFORMAÇÕES GERAIS DO LIVRO TÉCNICO}
+\end{center}
+
+\vspace{1.2em}
+
+O número mínimo de capítulos do livro digital (\textit{e-Book}) deve ser de 5 (cinco) capítulos, desde que tenha, no mínimo, 50 páginas. O livro não será comercializado, no intuito de divulgar o conhecimento de forma ampla e gratuita.
+
+Ao livro, será atribuído o \textit{International Standard Book Number} (ISBN), a ficha catalográfica, o código de barras, o \textit{Digital Object Identifier} (DOI), cujo prefixo é da própria editora. Também será licenciado com uma Licença Creative Commons -- Atribuição-NãoComercial-SemDerivações 4.0 Internacional. Assim como os serviços de diagramação, design e publicação no site da editora.
+
+Vale ressaltar que o(s) autor(es) ou organizador(es) têm que fazer a apresentação (descrição) do livro, contendo no máximo quatro parágrafos, não excedendo uma página.
+
+Por se tratar de um livro técnico, os autores/organizadores são apresentados exclusivamente no início da obra, e os capítulos desenvolvem livremente os tópicos técnicos, finalizando com as referências.
+
+% ==============================================================================
+% APRESENTAÇÃO DA OBRA (MÁXIMO 4 PARÁGRAFOS)
+% ==============================================================================
+\vspace{2.5em}
+
+\begin{center}
+\setstretch{1.0}
+\textbf{\fontsize{12}{14}\selectfont APRESENTAÇÃO}
+\end{center}
+
+\vspace{1.2em}
+
+A evolução dos ecossistemas digitais e a centralidade da informação nas organizações contemporâneas transformaram os Sistemas Gerenciadores de Bancos de Dados (SGBDs) no ativo mais estratégico da infraestrutura tecnológica. Contudo, a simples capacidade de armazenar grandes volumes de registros não é suficiente: a consistência, a blindagem contra acessos indevidos e a rigorosa observância dos marcos regulatórios de privacidade definem o sucesso ou a vulnerabilidade das soluções corporativas.
+
+Este livro técnico foi concebido com uma metodologia estritamente prática, baseada na premissa de que a consolidação de conceitos avançados de engenharia de dados ocorre pela experimentação direta, pela observação de falhas induzidas e pela resolução guiada de cenários do mundo real. Ao longo de cinco capítulos estruturados, o leitor é conduzido desde os mecanismos formais de integridade declarativa e procedural até as arquiteturas modernas de defesa e conformidade normativa em ambiente MySQL.
+
+A obra aborda em profundidade as restrições de domínio, entidade e integridade referencial, o uso estratégico de gatilhos (\textit{triggers}) e procedimentos armazenados, as matrizes de privilégios com papéis (\textit{roles}) sob o princípio do menor privilégio, bem como as técnicas criptográficas simétricas e algoritmos de resumo criptográfico (\textit{hash}). Culmina na implementação direta dos postulados da Lei Geral de Proteção de Dados Pessoais (LGPD -- Lei nº 13.709/2018), demonstrando inventário de dados, anonimização, pseudonimização, trilhas de auditoria contínua e atendimento tempestivo aos direitos dos titulares.
+
+Destinado a estudantes de cursos técnicos, graduações em Computação e Engenharia de Software, analistas de sistemas e administradores de bancos de dados (DBAs), este guia serve como referência teórica e laboratório prático para todos que buscam projetar e manter bases de dados robustas, seguras e em plena conformidade com as melhores práticas de governança da informação.
+
+% ==============================================================================
+% PÁGINA DE ORGANIZAÇÃO / AUTORIA DA OBRA
+% ==============================================================================
+\vspace{3.0em}
+
+\begin{center}
+\setstretch{1.0}
+\textbf{\fontsize{14}{16}\selectfont \color{black} ORGANIZAÇÃO E AUTORIA}
+\end{center}
+
+\vspace{1.5em}
+
+\begin{singlespace}
+\noindent \textbf{Prof. Júlio César}\\[0.3em]
+\noindent Docente da Faculdade de Engenharia de Software da Universidade de Rio Verde (UniRV) e Instrutor de Informática na Escola SENAI (Unidade Fernando Bezerra).\\[0.2em]
+\noindent Atuante no ramo de tecnologia há mais de 10 anos, com expertise nas áreas de dados e inteligência de negócios, projetos de software e requisitos de software.
+\end{singlespace}
+
+\newpage
+
+% ==============================================================================
+% INCLUSÃO DOS CAPÍTULOS (PASTA: capitulos/)
+% ==============================================================================
+
+\input{capitulos/capitulo1.tex}
+
+\newpage
+\input{capitulos/capitulo2.tex}
+
+\newpage
+\input{capitulos/capitulo3.tex}
+
+\newpage
+\input{capitulos/capitulo4.tex}
+
+\newpage
+\input{capitulos/capitulo5.tex}
+
+\newpage
+% ==============================================================================
+% REFERÊNCIAS GERAIS DA OBRA (ABNT)
+% ==============================================================================
+
+\begin{center}
+\setstretch{1.0}
+\textbf{\fontsize{14}{16}\selectfont REFERÊNCIAS GERAIS DA OBRA}
+\end{center}
+
+\vspace{1.5em}
+
+\noindent ANPD. AUTORIDADE NACIONAL DE PROTEÇÃO DE DADOS. \textbf{Guia Orientativo: Segurança da Informação para Agentes de Tratamento de Pequeno Porte}. Brasília: ANPD, 2021.
+
+\vspace{0.8em}
+\noindent ANPD. AUTORIDADE NACIONAL DE PROTEÇÃO DE DADOS. \textbf{Guia Orientativo: Tratamento de Dados Pessoais para Fins Acadêmicos e Estudos por Órgão de Pesquisa}. Brasília: ANPD, 2023.
+
+\vspace{0.8em}
+\noindent BIONI, R. C. \textbf{Proteção de Dados Pessoais: A Função e os Limites do Consentimento}. 3. ed. Rio de Janeiro: Forense, 2021.
+
+\vspace{0.8em}
+\noindent BRASIL. \textbf{Lei nº 13.709, de 14 de agosto de 2018}. Lei Geral de Proteção de Dados Pessoais (LGPD). Diário Oficial da União: seção 1, Brasília, DF, 15 ago. 2018.
+
+\vspace{0.8em}
+\noindent BRASIL. \textbf{Emenda Constitucional nº 115, de 10 de fevereiro de 2022}. Altera a Constituição Federal para incluir a proteção de dados pessoais entre os direitos e garantias fundamentais. Diário Oficial da União: Brasília, DF, 11 fev. 2022.
+
+\vspace{0.8em}
+\noindent CODD, E. F. A relational model of data for large shared data banks. \textbf{Communications of the ACM}, v. 13, n. 6, p. 377-387, 1970.
+
+\vspace{0.8em}
+\noindent DATE, C. J. \textbf{Introdução a Sistemas de Bancos de Dados}. 8. ed. Rio de Janeiro: Elsevier, 2004.
+
+\vspace{0.8em}
+\noindent DONEDA, D. \textbf{Da Privacidade à Proteção de Dados Pessoais: Elementos da Formação do seu Conceito}. 2. ed. São Paulo: Thomson Reuters Brasil, 2020.
+
+\vspace{0.8em}
+\noindent ELMASRI, R.; NAVATHE, S. B. \textbf{Sistemas de Banco de Dados}. 6. ed. São Paulo: Pearson Addison Wesley, 2011.
+
+\vspace{0.8em}
+\noindent FERGUSON, N.; SCHNEIER, B.; KOHNO, T. \textbf{Cryptography Engineering: Design Principles and Practical Applications}. Indianapolis: Wiley Publishing, 2010.
+
+\vspace{0.8em}
+\noindent KAUFMAN, C.; PERLMAN, R.; SPECINER, M. \textbf{Network Security: Private Communication in a Public World}. 2. ed. Upper Saddle River: Prentice Hall, 2002.
+
+\vspace{0.8em}
+\noindent MELTON, J.; SIMON, A. R. \textbf{SQL: 1999 - Understanding Relational Language Components}. San Francisco: Morgan Kaufmann, 2002.
+
+\vspace{0.8em}
+\noindent NIST. NATIONAL INSTITUTE OF STANDARDS AND TECHNOLOGY. \textbf{FIPS PUB 197: Advanced Encryption Standard (AES)}. Gaithersburg: U.S. Department of Commerce, 2001.
+
+\vspace{0.8em}
+\noindent ORACLE. \textbf{MySQL 8.0 Reference Manual}. Redwood City: Oracle Corporation, 2024. Disponível em: \url{https://dev.mysql.com/doc/refman/8.0/en/}. Acesso em: 13 out. 2026.
+
+\vspace{0.8em}
+\noindent OWASP. \textbf{OWASP Top 10: 2021 - The Ten Most Critical Web Application Security Risks}. Open Web Application Security Project, 2021. Disponível em: \url{https://owasp.org/Top10/}. Acesso em: 13 out. 2026.
+
+\vspace{0.8em}
+\noindent PINHEIRO, P. P. \textbf{Proteção de Dados Pessoais: Comentários à Lei nº 13.709/2018 (LGPD)}. 2. ed. São Paulo: Saraiva Educação, 2020.
+
+\vspace{0.8em}
+\noindent SALTZER, J. H.; SCHROEDER, M. D. The protection of information in computer systems. \textbf{Proceedings of the IEEE}, v. 63, n. 9, p. 1278-1308, 1975.
+
+\vspace{0.8em}
+\noindent SANDHU, R. S. et al. Role-based access control models. \textbf{IEEE Computer}, v. 29, n. 2, p. 38-47, 1996.
+
+\vspace{0.8em}
+\noindent SILBERSCHATZ, A.; KORTH, H. F.; SUDARSHAN, S. \textbf{Sistema de Banco de Dados}. 7. ed. Rio de Janeiro: GEN LTC, 2020.
+
+\vspace{0.8em}
+\noindent STALLINGS, W.; BROWN, L. \textbf{Segurança de Computadores: Princípios e Práticas}. 4. ed. Rio de Janeiro: GEN LTC, 2018.
+
+\end{document}

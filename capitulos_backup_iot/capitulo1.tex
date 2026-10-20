@@ -1,0 +1,1303 @@
+% ==============================================================================
+% CAPÍTULO 1: O PROTOCOLO HTTP E ARQUITETURAS MULTICLIENTE EM SISTEMAS DE IRRIGAÇÃO IOT
+% ==============================================================================
+
+\begin{center}
+\setstretch{1.0}
+\textbf{\fontsize{14}{16}\selectfont CAPÍTULO 1}
+
+\vspace{0.5em}
+
+\textbf{\fontsize{14}{16}\selectfont O PROTOCOLO HTTP E ARQUITETURAS MULTICLIENTE EM SISTEMAS DE IRRIGAÇÃO AUTOMATIZADOS COM INTERNET DAS COISAS (IoT)}
+\end{center}
+
+\vspace{1.5em}
+
+\section*{1. INTRODUÇÃO AO PROTOCOLO HTTP NA INTERNET DAS COISAS}
+
+A transformação digital no setor agrícola, impulsionada pelo conceito de Agricultura 4.0, exige a integração contínua entre dispositivos de campo (atuadores, relés e sensores) e sistemas de gestão de alto nível (dashboards web e aplicativos móveis). No centro dessa infraestrutura de comunicação encontra-se o protocolo \textbf{HTTP} (\textit{Hypertext Transfer Protocol}), um protocolo da camada de aplicação do modelo OSI/TCP-IP que se consagrou como o padrão fundamental para a transferência de dados na Web e em arquiteturas distribuídas de Internet das Coisas (IoT).
+
+Conforme conceituado por Kurose e Ross (2010), o HTTP é o protocolo da camada de aplicação da Web que define a comunicação entre clientes (como navegadores ou dispositivos IoT) e servidores Web. Seu funcionamento baseia-se essencialmente no modelo de requisição e resposta, no qual o cliente solicita objetos ou recursos Web e o servidor retorna os dados correspondentes. Além disso, Kurose e Ross (2010) destacam que o HTTP é tradicionalmente caracterizado como um protocolo sem estado (\textit{stateless}), uma vez que o servidor não mantém, por padrão, informações ou contexto sobre requisições anteriores efetuadas pelo mesmo cliente. Dessa forma, cada requisição é tratada de maneira estritamente independente das solicitações prévias (KUROSE; ROSS, 2010).
+
+No contexto de sistemas de irrigação automatizados, essa propriedade sem estado proporciona elevada escalabilidade e simplicidade operacional para dispositivos de recursos limitados, como o ESP32 e o Arduino. Cada consulta periódica de estado (\textit{polling}) ou acionamento pontual de bomba hidráulica é executado como uma transação autônoma perante o servidor central Flask.
+
+O protocolo HTTP opera estritamente sob o modelo \textbf{Cliente-Servidor}. Nessa arquitetura, o \textit{Cliente} (dispositivo de campo, navegador web ou aplicativo para smartphone) inicia ativamente a comunicação enviando uma mensagem de \textit{Requisição} (\textit{HTTP Request}) para um endereço IP ou nome de domínio específico. O \textit{Servidor} (no contexto deste trabalho, o serviço backend desenvolvido em Python Flask), por sua vez, escuta continuamente em uma porta de rede predefinida (geralmente a porta 80 para HTTP ou 443 para HTTPS), processa a solicitação recebida, consulta o banco de dados relacional e retorna uma mensagem de \textit{Resposta} (\textit{HTTP Response}).
+
+\subsection*{1.1. Estrutura Fundamental da Requisição HTTP}
+
+A estrutura fundamental de uma requisição HTTP é composta por quatro partes bem definidas: a \textbf{linha de requisição} (\textit{request line}), os \textbf{cabeçalhos} (\textit{headers}), a \textbf{linha em branco} (\textit{CRLF}) e o \textbf{corpo da mensagem} (\textit{body}), que é opcional. Essa organização padronizada permite que o cliente informe ao servidor qual operação deseja realizar, qual recurso deseja acessar e, quando necessário, envie dados adicionais (FIELDING; NOTTINGHAM; RESCHKE, 2022a, 2022b).
+
+A estrutura geral de uma requisição HTTP/1.1 em seu formato textual bruto é representada a seguir:
+
+\begin{lstlisting}
+METODO /recurso HTTP/1.1
+Cabecalho-1: valor
+Cabecalho-2: valor
+
+corpo da requisicao
+\end{lstlisting}
+
+\subsubsection*{1. Linha de Requisição (\textit{Request Line})}
+
+A linha de requisição é a primeira linha transmitida pela mensagem e é formada por três elementos separados por espaço:
+\begin{lstlisting}
+METODO alvo versao-do-HTTP
+\end{lstlisting}
+
+Um exemplo comum em requisições de consulta Web é:
+\begin{lstlisting}
+GET /produtos/melao HTTP/1.1
+\end{lstlisting}
+
+\subsubsection*{1.1.1. Método da Requisição (Semântica de Contrato em Sistemas de Irrigação IoT)}
+
+Para entusiastas da computação, tecnologia e ciências agrárias, o método HTTP (frequentemente denominado verbo HTTP) não representa apenas uma palavra reservada transmitida na primeira linha de uma requisição de rede. O método HTTP constitui a definição formal do \textbf{contrato de interface da camada de aplicação}. Ele estabelece a semântica operacional da mensagem transmitida entre o cliente (seja ele uma aplicação Web em Angular, um aplicativo móvel ou um firmware em linguagem C++ executado em um nó embarcado ESP32) e o servidor backend (como a API desenvolvida em Python Flask) (FIELDING; NOTTINGHAM; RESCHKE, 2022a).
+
+Na ciência da computação e no projeto de sistemas agrícolas inteligentes, a escolha adequada dos métodos HTTP assegura a aplicação de princípios fundamentais de arquitetura de software, tais como:
+\begin{itemize}
+    \item \textbf{Separação de Responsabilidades (\textit{Separation of Concerns}):} Onde o identificador do recurso (a URI/URL) representa o substantivo ou objeto do domínio do problema (ex.: \texttt{/agendamentos}, \texttt{/solenoides}), enquanto o método HTTP estabelece estritamente a ação a ser desempenhada sobre esse objeto (ex.: ler, criar, atualizar ou excluir).
+    \item \textbf{Desacoplamento e Interoperabilidade (\textit{Loose Coupling}):} Permitindo que clientes heterogêneos compreendam antecipadamente o comportamento esperado do servidor sem necessidade de conhecer a implementação interna do código-fonte do backend ou a estrutura de tabelas do banco de dados relacional MySQL.
+    \item \textbf{Mapeamento com o Modelo CRUD:} Estabelecendo uma correspondência direta entre as quatro operações clássicas de persistência de dados (\textit{Create, Read, Update, Delete}) e os verbos HTTP correspondentes (\texttt{POST}, \texttt{GET}, \texttt{PUT/PATCH}, \texttt{DELETE}).
+\end{itemize}
+
+A seguir, cada um dos métodos HTTP é analisado sob a perspectiva de entusiastas de computação e ciências agrárias, acompanhado de sua fundamentação teórica sobre \textbf{Segurança} e \textbf{Idempotência}, seus respectivos exemplos completos de cabeçalhos de requisição e resposta bruta no protocolo HTTP/1.1, e a sua aplicação prática no sistema de automação de irrigação.
+
+\paragraph*{A. Método GET (Recuperação de Dados e Consulta Transparente)}
+
+\textbf{Semântica Operacional:} O método \texttt{GET} solicita ao servidor a representação atualizada de um recurso específico ou de uma coleção de objetos. Por especificação formal, a requisição \texttt{GET} deve ser exclusivamente informativa. Ela não deve conter um corpo de dados no envio e nunca deve causar mutações de estado na base de dados relacional ou gerar acionamentos em relés e atuadores de campo.
+
+\textbf{Análise Teórica: Segurança e Idempotência}
+\begin{itemize}
+    \item \textbf{Seguro (\textit{Safe}): SIM.} A execução de uma chamada \texttt{GET} não altera o estado do sistema. Entusiastas e projetistas do sistema devem garantir que funções associadas a rotas \texttt{GET} executem estritamente instruções SQL do tipo \texttt{SELECT}, sem realizar operações de escrita ou alteração de variáveis globais de estado.
+    \item \textbf{Idempotente (\textit{Idempotent}): SIM.} Executar a mesma requisição \texttt{GET} uma vez ou cem vezes consecutivas resulta na mesma leitura informativa, sem acumular efeitos colaterais.
+\end{itemize}
+
+\textbf{Exemplo Completo de Troca de Cabeçalhos de Requisição e Resposta:}
+
+\textit{Requisição HTTP/1.1 enviada pelo cliente (Dashboard Angular / Navegador Web):}
+\begin{lstlisting}
+GET /agendamentos HTTP/1.1
+Host: 192.168.1.100:5000
+User-Agent: Mozilla/5.0 (X11; Linux x86_64) Angular-HttpClient/17.0.0
+Accept: application/json
+Accept-Language: pt-BR,pt;q=0.9,en-US;q=0.8
+Connection: keep-alive
+Cache-Control: no-cache
+
+\end{lstlisting}
+
+\textit{Resposta HTTP/1.1 retornada pelo servidor (API Python Flask / Werkzeug):}
+\begin{lstlisting}
+HTTP/1.1 200 OK
+Server: Werkzeug/3.0.1 Python/3.10.12
+Date: Mon, 29 Sep 2026 15:00:00 GMT
+Content-Type: application/json; charset=utf-8
+Content-Length: 215
+Access-Control-Allow-Origin: *
+Connection: keep-alive
+
+[
+  {
+    "id": 14,
+    "data_agendamento": "2026-09-29",
+    "hora_inicio": "08:00:00",
+    "hora_fim": "08:30:00",
+    "duracao_minutos": 30,
+    "solenoide": "Setor 1",
+    "usuario": "Thiago",
+    "status": "AGENDADO"
+  }
+]
+\end{lstlisting}
+
+\textbf{Aplicação no Sistema de Irrigação:} O método \texttt{GET /agendamentos} permite que a interface gráfica do usuário renderize a tabela de irrigações agendadas, enquanto o endpoint \texttt{GET /estado-geral} é consultado periodicamente pelos microcontroladores ESP32 para verificar se o relé da bomba de água precisa estar ligado ou desligado.
+
+\paragraph*{B. Método POST (Criação de Recursos e Processamento de Ações)}
+
+\textbf{Semântica de Engenharia:} O método \texttt{POST} solicita que o servidor aceite a entidade enviada no corpo da requisição como um novo membro do recurso identificado pela URI. O \texttt{POST} também é utilizado para disparar operações de controle que envolvem processamento ativo ou efeitos colaterais.
+
+\textbf{Análise Teórica: Segurança e Idempotência}
+\begin{itemize}
+    \item \textbf{Seguro (\textit{Safe}): NÃO.} O processamento de um \texttt{POST} resulta em mutação de dados no servidor (inserção de novas linhas em tabelas SQL ou acionamento de atuadores).
+    \item \textbf{Idempotente (\textit{Idempotent}): NÃO.} Se um aplicativo enviar uma requisição \texttt{POST /agendamentos} idêntica três vezes por engano (por exemplo, devido a um clique duplo do usuário ou retransmissão de rede sem identificador de transação), o servidor criará três registros independentes no banco de dados, cada um com uma nova chave primária auto-incrementada.
+\end{itemize}
+
+\textbf{Exemplo Completo de Troca de Cabeçalhos de Requisição e Resposta:}
+
+\textit{Requisição HTTP/1.1 enviada pelo cliente (Aplicativo Móvel em Smartphone):}
+\begin{lstlisting}
+POST /agendamentos HTTP/1.1
+Host: 192.168.1.100:5000
+User-Agent: IrrigacaoMobileApp/2.1 (Android 14)
+Content-Type: application/json
+Accept: application/json
+Content-Length: 178
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Connection: keep-alive
+
+{
+  "data_agendamento": "2026-09-29",
+  "hora_inicio": "14:00:00",
+  "hora_fim": "14:45:00",
+  "duracao_minutos": 45,
+  "solenoide": "Setor 2",
+  "usuario": "Sergio",
+  "status": "AGENDADO"
+}
+\end{lstlisting}
+
+\textit{Resposta HTTP/1.1 retornada pelo servidor:}
+\begin{lstlisting}
+HTTP/1.1 200 OK
+Server: Werkzeug/3.0.1 Python/3.10.12
+Date: Mon, 29 Sep 2026 15:02:10 GMT
+Content-Type: application/json; charset=utf-8
+Content-Length: 182
+Access-Control-Allow-Origin: *
+Connection: keep-alive
+
+{
+  "data_agendamento": "2026-09-29",
+  "duracao_minutos": 45,
+  "hora_fim": "14:45:00",
+  "hora_inicio": "14:00:00",
+  "id": 15,
+  "solenoide": "Setor 2",
+  "status": "AGENDADO",
+  "usuario": "Sergio"
+}
+\end{lstlisting}
+
+\textbf{Aplicação no Sistema de Irrigação:} O método \texttt{POST /agendamentos} insere uma nova rotina de irrigação na tabela do MySQL. Da mesma forma, o endpoint \texttt{POST /bomba?ativo=true} recebe a instrução para forçar o acionamento direto da bomba hidráulica fora do horário de agendamento automático.
+
+\paragraph*{C. Método PUT (Substituição Integral de Recurso)}
+
+\textbf{Semântica de Engenharia:} O método \texttt{PUT} requisita ao servidor que crie ou substitua integralmente o recurso localizado na URI especificada pelo payload fornecido no corpo da requisição. Diferente do \texttt{POST}, o cliente indica a URI exata do objeto que está sendo atualizado (ex.: \texttt{/agendamentos/15}).
+
+\textbf{Análise Teórica: Segurança e Idempotência}
+\begin{itemize}
+    \item \textbf{Seguro (\textit{Safe}): NÃO.} Altera o estado dos dados no banco relacional.
+    \item \textbf{Idempotente (\textit{Idempotent}): SIM.} Como o corpo contém a representação completa do recurso desejado, enviar a requisição \texttt{PUT /agendamentos/15} uma vez ou dez vezes consecutivas resulta exatamente no mesmo estado final armazenado no servidor.
+\end{itemize}
+
+\textbf{Exemplo Completo de Troca de Cabeçalhos de Requisição e Resposta:}
+
+\textit{Requisição HTTP/1.1 enviada pelo cliente:}
+\begin{lstlisting}
+PUT /agendamentos/15 HTTP/1.1
+Host: 192.168.1.100:5000
+User-Agent: Angular-HttpClient/17.0.0
+Content-Type: application/json
+Accept: application/json
+Content-Length: 178
+Connection: keep-alive
+
+{
+  "data_agendamento": "2026-09-29",
+  "hora_inicio": "15:00:00",
+  "hora_fim": "16:00:00",
+  "duracao_minutos": 60,
+  "solenoide": "Setor 2",
+  "usuario": "Sergio",
+  "status": "REAGENDADO"
+}
+\end{lstlisting}
+
+\textit{Resposta HTTP/1.1 retornada pelo servidor:}
+\begin{lstlisting}
+HTTP/1.1 200 OK
+Server: Werkzeug/3.0.1 Python/3.10.12
+Date: Mon, 29 Sep 2026 15:05:00 GMT
+Content-Type: application/json; charset=utf-8
+Content-Length: 184
+Access-Control-Allow-Origin: *
+Connection: keep-alive
+
+{
+  "data_agendamento": "2026-09-29",
+  "duracao_minutos": 60,
+  "hora_fim": "16:00:00",
+  "hora_inicio": "15:00:00",
+  "id": 15,
+  "solenoide": "Setor 2",
+  "status": "REAGENDADO",
+  "usuario": "Sergio"
+}
+\end{lstlisting}
+
+\textbf{Aplicação no Sistema de Irrigação:} O método \texttt{PUT} é essencial para permitir que os engenheiros de software implementem formulários de edição completa onde o usuário modifica simultaneamente a data, os horários de início/fim e o setor da cultura.
+
+\paragraph*{D. Método PATCH (Modificação Parcial de Atributos)}
+
+\textbf{Semântica de Engenharia:} O método \texttt{PATCH} aplica modificações parciais a um recurso existente. Ao contrário do \texttt{PUT}, que exige o envio de todo o objeto, o \texttt{PATCH} permite enviar apenas as chaves e valores dos atributos que necessitam ser alterados, economizando largura de banda em redes de baixa velocidade.
+
+\textbf{Análise Teórica: Segurança e Idempotência}
+\begin{itemize}
+    \item \textbf{Seguro (\textit{Safe}): NÃO.} Provoca alteração de estado no sistema.
+    \item \textbf{Idempotente (\textit{Idempotent}): SIM} (em mutações diretas de atribuição, ex.: \texttt{status = "EXECUTADO"}). Contudo, pode ser não-idempotente caso o contrato do \texttt{PATCH} especifique operações cumulativas (ex.: \texttt{incrementar\_tempo = +10}).
+\end{itemize}
+
+\textbf{Exemplo Completo de Troca de Cabeçalhos de Requisição e Resposta:}
+
+\textit{Requisição HTTP/1.1 enviada pelo cliente:}
+\begin{lstlisting}
+PATCH /agendamentos/15 HTTP/1.1
+Host: 192.168.1.100:5000
+User-Agent: ESP32-IrrigaClient/1.0
+Content-Type: application/json
+Accept: application/json
+Content-Length: 26
+Connection: keep-alive
+
+{
+  "status": "EXECUTADO"
+}
+\end{lstlisting}
+
+\textit{Resposta HTTP/1.1 retornada pelo servidor:}
+\begin{lstlisting}
+HTTP/1.1 200 OK
+Server: Werkzeug/3.0.1 Python/3.10.12
+Date: Mon, 29 Sep 2026 15:10:00 GMT
+Content-Type: application/json; charset=utf-8
+Content-Length: 64
+Access-Control-Allow-Origin: *
+Connection: keep-alive
+
+{
+  "id": 15,
+  "message": "Status do agendamento 15 alterado para EXECUTADO"
+}
+\end{lstlisting}
+
+\textbf{Aplicação no Sistema de Irrigação:} Quando o microcontrolador ESP32 conclui o ciclo de irrigação agendado no setor 2, ele dispara uma requisição \texttt{PATCH} rápida atualizando unicamente o atributo \texttt{status} para \texttt{EXECUTADO}, sem a necessidade de retransmitir todos os demais dados do agendamento.
+
+\paragraph*{E. Método DELETE (Remoção e Exclusão de Recursos)}
+
+\textbf{Semântica de Engenharia:} O método \texttt{DELETE} solicita ao servidor a remoção permanente do recurso identificado pela URI da requisição. 
+
+\textbf{Análise Teórica: Segurança e Idempotência}
+\begin{itemize}
+    \item \textbf{Seguro (\textit{Safe}): NÃO.} Exclui registros das tabelas do banco de dados relacional.
+    \item \textbf{Idempotente (\textit{Idempotent}): SIM.} O primeiro envio remove o recurso e retorna sucesso (\texttt{200 OK} ou \texttt{204 No Content}). As execuções subsequentes confirmam que o recurso não está mais presente (\texttt{404 Not Found}), sem alterar novamente o estado do sistema.
+\end{itemize}
+
+\textbf{Exemplo Completo de Troca de Cabeçalhos de Requisição e Resposta:}
+
+\textit{Requisição HTTP/1.1 enviada pelo cliente (Dashboard Web Angular):}
+\begin{lstlisting}
+DELETE /agendamentos/15 HTTP/1.1
+Host: 192.168.1.100:5000
+User-Agent: Mozilla/5.0 (X11; Linux x86_64) Angular-HttpClient/17.0.0
+Accept: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Connection: keep-alive
+
+
+\end{lstlisting}
+
+\textit{Resposta HTTP/1.1 retornada pelo servidor:}
+\begin{lstlisting}
+HTTP/1.1 200 OK
+Server: Werkzeug/3.0.1 Python/3.10.12
+Date: Mon, 29 Sep 2026 15:15:00 GMT
+Content-Type: application/json; charset=utf-8
+Content-Length: 48
+Access-Control-Allow-Origin: *
+Connection: keep-alive
+
+{
+  "message": "Agendamento 15 removido com sucesso"
+}
+\end{lstlisting}
+
+\textbf{Aplicação no Sistema de Irrigação:} Permite ao operador cancelar programações de irrigação duplicadas ou equivocadas diretamente da interface de controle, executando internamente um comando SQL \texttt{DELETE FROM agendamentos WHERE id = 15}.
+
+\paragraph*{F. Método HEAD (Inspeção Eficiente de Metadados)}
+
+\textbf{Semântica de Engenharia:} O método \texttt{HEAD} é idêntico ao \texttt{GET} na fase de processamento no servidor, com a única diferença crítica de que o servidor \textbf{nunca} deve retornar o corpo da mensagem na resposta. Ele é utilizado por engenheiros para inspecionar os cabeçalhos de resposta (\texttt{Content-Length}, \texttt{Content-Type}, \texttt{Last-Modified}) sem arcar com o custo de transferência do payload.
+
+\textbf{Análise Teórica: Segurança e Idempotência}
+\begin{itemize}
+    \item \textbf{Seguro (\textit{Safe}): SIM.} Não provoca mutações no banco de dados.
+    \item \textbf{Idempotente (\textit{Idempotent}): SIM.} Leituras repetidas de cabeçalhos não causam efeitos colaterais.
+\end{itemize}
+
+\textbf{Exemplo Completo de Troca de Cabeçalhos de Requisição e Resposta:}
+
+\textit{Requisição HTTP/1.1 enviada pelo microcontrolador ESP32:}
+\begin{lstlisting}
+HEAD /agendamentos HTTP/1.1
+Host: 192.168.1.100:5000
+User-Agent: ESP32-IrrigaClient/1.0
+Accept: application/json
+Connection: close
+
+
+\end{lstlisting}
+
+\textit{Resposta HTTP/1.1 retornada pelo servidor (note a ausência de corpo):}
+\begin{lstlisting}
+HTTP/1.1 200 OK
+Server: Werkzeug/3.0.1 Python/3.10.12
+Date: Mon, 29 Sep 2026 15:20:00 GMT
+Content-Type: application/json; charset=utf-8
+Content-Length: 1450
+Cache-Control: public, max-age=60
+Access-Control-Allow-Origin: *
+Connection: close
+
+
+\end{lstlisting}
+
+\textbf{Aplicação no Sistema de Irrigação:} O nó ESP32 pode consultar via \texttt{HEAD} a extensão do arquivo de agendamentos. Se o \texttt{Content-Length} permanecer constante, o microcontrolador conclui que nenhuma nova programação foi cadastrada, economizando ciclos de CPU, tráfego de dados celulares M2M e energia de bateria.
+
+\paragraph*{G. Método OPTIONS (Negociação de Capacidades e CORS Preflight)}
+
+\textbf{Semântica de Engenharia:} O método \texttt{OPTIONS} permite ao cliente consultar quais métodos HTTP e capacidades de comunicação são suportadas pelo servidor para uma determinada URI. É o método padronizado utilizado pelos navegadores web para executar requisições prévias de segurança (\textit{Preflight Requests}) em arquiteturas com compartilhamento de recursos entre origens distintas (CORS - \textit{Cross-Origin Resource Sharing}).
+
+\textbf{Análise Teórica: Segurança e Idempotência}
+\begin{itemize}
+    \item \textbf{Seguro (\textit{Safe}): SIM.} Trata-se de uma consulta pura de metadados de protocolo.
+    \item \textbf{Idempotente (\textit{Idempotent}): SIM.} Retorna sempre as permissões do servidor.
+\end{itemize}
+
+\textbf{Exemplo Completo de Troca de Cabeçalhos de Requisição e Resposta:}
+
+\textit{Requisição OPTIONS Preflight enviada automaticamente pelo Navegador Web:}
+\begin{lstlisting}
+OPTIONS /agendamentos HTTP/1.1
+Host: 192.168.1.100:5000
+User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36
+Origin: http://localhost:4200
+Access-Control-Request-Method: POST
+Access-Control-Request-Headers: Content-Type, Authorization
+Connection: keep-alive
+
+
+\end{lstlisting}
+
+\textit{Resposta HTTP/1.1 de autorização retornada pelo servidor Flask:}
+\begin{lstlisting}
+HTTP/1.1 200 OK
+Server: Werkzeug/3.0.1 Python/3.10.12
+Date: Mon, 29 Sep 2026 15:25:00 GMT
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+Access-Control-Allow-Headers: Content-Type, Authorization
+Access-Control-Max-Age: 86400
+Content-Length: 0
+Connection: keep-alive
+
+
+\end{lstlisting}
+
+\textbf{Aplicação no Sistema de Irrigação:} Quando a aplicação frontend em Angular roda localmente em \texttt{http://localhost:4200} e tenta enviar um \texttt{POST /agendamentos} para o backend em \texttt{http://192.168.1.100:5000}, o navegador dispara primeiramente um \texttt{OPTIONS} prévio. A resposta com os cabeçalhos \texttt{Access-Control-Allow-Origin: *} autoriza o navegador a prosseguir com a requisição \texttt{POST} sem lançar exceções de bloqueio de segurança no console JavaScript.
+
+\paragraph*{H. Recomendações e Boas Práticas para Engenheiros de Software}
+
+Com base na semântica formal dos métodos HTTP, a Tabela 1 resume as diretrizes de projeto que todo engenheiro de software deve seguir ao projetar APIs RESTful para IoT.
+
+\begin{table}[h!]
+\centering
+\fontsize{9}{11}\selectfont
+\caption{Diretrizes de boas práticas e anti-padrões no uso dos métodos HTTP em Engenharia de Software.}
+\begin{tabular}{|l|p{5cm}|p{5cm}|}
+\hline
+\textbf{Método} & \textbf{Boa Prática Recomendada} & \textbf{Anti-padrão a Evitar (\textit{Bad Practice})} \\ \hline
+\texttt{GET} & Utilizar estritamente para leitura e consulta. & Alterar estados no banco (ex.: \texttt{GET /deletar?id=1}). \\ \hline
+\texttt{POST} & Utilizar para criação de recursos e envio de formulários. & Retornar 200 OK quando o objeto falha em ser criado. \\ \hline
+\texttt{PUT} & Fornecer o objeto completo para substituição de dados. & Omitir campos obrigatórios no corpo da requisição. \\ \hline
+\texttt{PATCH} & Enviar apenas os atributos que sofrerão alteração. & Utilizar \texttt{PATCH} quando a atualização for total. \\ \hline
+\texttt{DELETE} & Retornar 200 OK com confirmação ou 204 No Content. & Manter o recurso acessível em chamadas posteriores. \\ \hline
+\texttt{HEAD} & Responder com os mesmos cabeçalhos do \texttt{GET}. & Transmitir corpo de dados na resposta \texttt{HEAD}. \\ \hline
+\texttt{OPTIONS} & Configurar cabeçalhos CORS limpos e permissivos. & Omitir tratamento de requisições preflight no backend. \\ \hline
+\end{tabular}
+\end{table}
+
+\subsubsection*{1.1.2. Alvo da Requisição (\textit{Request Target})}
+
+Indica o recurso específico que será acessado. Geralmente aparece como um caminho ou rota de URL (\texttt{/produtos/melao}). Também pode incluir parâmetros de consulta (\textit{query string}):
+
+\begin{lstlisting}
+/produtos?variedade=amarelo&maturidade=alta
+\end{lstlisting}
+
+Neste exemplo, \texttt{/produtos} é o caminho do recurso, enquanto \texttt{variedade=amarelo} e \texttt{maturidade=alta} são parâmetros de consulta informados ao servidor.
+
+\subsubsection*{1.1.3. Versão do Protocolo}
+
+Informa a versão do HTTP utilizada na comunicação (ex.: \texttt{HTTP/1.1}). Em versões como HTTP/2 e HTTP/3, a comunicação utiliza mecanismos binários multiplexados sobre conexões TCP ou QUIC, portanto a representação observada na rede difere da sintaxe textual tradicional do HTTP/1.1 descrita na RFC 9112 (FIELDING; NOTTINGHAM; RESCHKE, 2022b).
+
+\subsubsection*{2. Cabeçalhos HTTP (\textit{Headers})}
+
+Os cabeçalhos são campos que transportam metadados sobre a requisição, o cliente, o recurso solicitado ou o corpo enviado. Cada cabeçalho possui um nome e um valor, separados por dois-pontos:
+
+\begin{lstlisting}
+Host: exemplo.com
+Accept: application/json
+User-Agent: Mozilla/5.0
+Content-Type: application/json
+Content-Length: 58
+Authorization: Bearer token
+\end{lstlisting}
+
+A Tabela 1 apresenta a finalidade dos cabeçalhos HTTP mais importantes.
+
+\begin{table}[h!]
+\centering
+\fontsize{10}{12}\selectfont
+\caption{Cabeçalhos HTTP fundamentais e suas respectivas finalidades.}
+\begin{tabular}{|l|p{10cm}|}
+\hline
+\textbf{Cabeçalho} & \textbf{Finalidade} \\ \hline
+\texttt{Host} & Informa o domínio ou servidor solicitado (obrigatório em HTTP/1.1 para servidores virtuais). \\ \hline
+\texttt{Accept} & Indica os formatos de mídia que o cliente aceita receber na resposta. \\ \hline
+\texttt{User-Agent} & Identifica o software cliente, como navegador, aplicativo móvel ou microcontrolador. \\ \hline
+\texttt{Content-Type} & Informa o formato dos dados presentes no corpo da requisição (ex.: \texttt{application/json}). \\ \hline
+\texttt{Content-Length} & Indica o tamanho do corpo da mensagem em bytes. \\ \hline
+\texttt{Authorization} & Transporta informações e tokens de autenticação. \\ \hline
+\texttt{Cookie} & Envia dados de sessão ou preferências armazenadas no cliente. \\ \hline
+\end{tabular}
+\end{table}
+
+O cabeçalho \texttt{Host} é especialmente importante no HTTP/1.1 porque permite identificar o servidor virtual específico ao qual a requisição se destina.
+
+\subsubsection*{3. Linha em Branco (\textit{CRLF})}
+
+Após os cabeçalhos, deve existir obrigatoriamente uma linha vazia:
+
+\begin{lstlisting}
+Host: exemplo.com
+Accept: text/html
+
+\end{lstlisting}
+
+Essa linha indica o término exato dos cabeçalhos e o início do corpo da mensagem, caso exista. Sem essa separação, o servidor não consegue distinguir corretamente os metadados do conteúdo enviado.
+
+\subsubsection*{4. Corpo da Requisição (\textit{Body})}
+
+O corpo contém dados enviados pelo cliente ao servidor. Ele é opcional e aparece com maior frequência em requisições \texttt{POST}, \texttt{PUT} e \texttt{PATCH}.
+
+Abaixo é apresentado um exemplo contendo um payload formatado em JSON:
+
+\begin{lstlisting}
+POST /api/frutos HTTP/1.1
+Host: sistema-agricola.com
+Content-Type: application/json
+Content-Length: 76
+
+{
+  "cultura": "melao",
+  "maturidade": "comercial",
+  "quantidade": 120
+}
+\end{lstlisting}
+
+Nesse caso, o corpo contém informações que serão processadas pela API, permitindo a transmissão de dados de sensores e comandos de atuadores no ambiente agrícola.
+
+\textit{Definição acadêmica:} A requisição HTTP é uma mensagem enviada pelo cliente ao servidor e constituída, fundamentalmente, por uma linha de requisição, campos de cabeçalho, uma linha em branco e, opcionalmente, um corpo. A linha de requisição informa o método, o recurso-alvo e a versão do protocolo; os cabeçalhos transportam metadados; e o corpo contém dados adicionais enviados ao servidor (FIELDING; NOTTINGHAM; RESCHKE, 2022a, 2022b).
+
+\subsection*{1.2. Principais Verbos HTTP e Semântica RESTful na Automação Agrícola}
+
+Na engenharia de software voltada para a Internet das Coisas (IoT), a comunicação entre dispositivos de campo (como microcontroladores ESP32 e Arduino) e os servidores de gerenciamento (desenvolvidos em Python Flask) baseia-se na arquitetura \textbf{REST} (\textit{Representational State Transfer}). O conceito central do REST é a abstração de \textbf{Recursos} (\textit{Resources}). Um recurso representa qualquer entidade sobre a qual o sistema de irrigação armazena informações ou executa ações de controle (FIELDING; NOTTINGHAM; RESCHKE, 2022a).
+
+No contexto deste projeto de automação agrícola, os principais recursos expostos pelo backend central (\texttt{backend-irriga}) compreendem a rota \texttt{/agendamentos}, que agrupa a coleção de todas as programações de irrigação cadastradas para as culturas; o endpoint \texttt{/solenoides}, que reúne o conjunto de válvulas solenoides responsáveis pelo direcionamento da água nos setores de plantio; a rota \texttt{/bomba}, que representa o recurso individual do motor e da bomba hidráulica principal de captação; e a rota \texttt{/estado-geral}, que fornece a visão unificada e sincronizada dos estados de todos os atuadores e sensores de campo.
+
+A regra de ouro do design RESTful estabelece que as URLs dos endpoints devem ser identificadas por \textbf{substantivos} no plural ou termos de entidade, enquanto a ação a ser executada sobre o recurso é determinada exclusivamente pelo \textbf{Verbo (ou Método) HTTP} utilizado no cabeçalho da requisição. Essa abordagem contrapõe-se a modelos legados não estruturados nos quais as URLs continham verbos na própria rota (ex.: \texttt{/criar\_agendamento?id=1}), garantindo maior padronização, manutenibilidade e previsibilidade arquitetural (RICHARDSON; RUBY, 2007).
+
+\subsubsection*{1.2.1. Conceitos Fundamentais: Segurança e Idempotência}
+
+Para compreender o comportamento dos verbos HTTP na automação rurais, é indispensável analisar duas propriedades formais estabelecidas na especificação RFC 9110 do IETF: a \textbf{Segurança} (\textit{Safety}) e a \textbf{Idempotência} (\textit{Idempotency}) (FIELDING; NOTTINGHAM; RESCHKE, 2022a).
+
+A \textbf{Segurança} (\textit{Safety}) caracteriza os métodos HTTP cujo propósito é estritamente a recuperação informativa de dados, sem provocar alterações de estado na base de dados relacional e sem disparar efeitos colaterais físicos no mundo real, tais como o acionamento de relés elétricos de bombas de água. Métodos seguros podem ser executados repetidamente sem o risco de descalibrar o sistema de irrigação.
+
+Por outro lado, a \textbf{Idempotência} (\textit{Idempotency}) define os métodos nos quais a execução de $N$ requisições idênticas consecutivas ($N \ge 1$) produz exatamente o mesmo efeito e o mesmo estado final no servidor que a execução de uma única requisição. 
+
+Em fazendas e ambientes agrícolas conectados por redes sem fio de longa distância (Wi-Fi rural ou redes celulares de 3ª/4ª geração com alta taxa de perda de pacotes e oscilação de sinal), a \textbf{idempotência} desempenha um papel crítico na resiliência do sistema. Se um nó ESP32 instalado no campo retransmitir uma requisição \texttt{PUT /solenoide/1} três vezes seguidas devido à perda de confirmação do pacote de rede, o servidor garantirá que o setor 1 permaneça ligado exatamente da mesma forma, sem gerar acionamentos duplicados ou comportamentos imprevisíveis nos relés.
+
+\subsubsection*{1.2.2. Detalhamento Didático e Exemplos Práticos dos Verbos HTTP}
+
+A seguir são apresentados, de forma didática e aprofundada, os 7 principais verbos HTTP empregados na arquitetura de irrigação automatizada, incluindo o processamento interno executado pelo backend Flask/SQLAlchemy e os exemplos brutos de mensagens trafegadas na rede.
+
+\paragraph*{A. Método GET (Consulta e Leitura Transparente)}
+
+\textbf{Explicação Didática:} O método \texttt{GET} equivale a consultar o painel de instrumentos de um trator ou verificar a caderneta de anotações da fazenda. O cliente pergunta ao servidor: \textit{"Quais são os dados armazenados para este recurso?"}.
+
+\textbf{Propriedades Formais:} Seguro = \textbf{SIM} $|$ Idempotente = \textbf{SIM}.
+
+\textbf{Funcionamento Interno no Backend:} Quando o servidor Flask recebe uma requisição \texttt{GET /agendamentos}, ele inicia uma transação SQL de leitura, executa a instrução \texttt{SELECT id, data\_agendamento, hora\_inicio, hora\_fim, duracao\_minutos, solenoide, usuario, status FROM agendamentos}, serializa os registros encontrados em uma lista JSON e responde com o código HTTP \texttt{200 OK}.
+
+\textbf{Exemplo 1.1: Consulta da Lista Completa de Agendamentos (\texttt{GET /agendamentos})}
+
+\textit{Requisição HTTP enviada pelo Dashboard Web ou Aplicativo Móvel:}
+\begin{lstlisting}
+GET /agendamentos HTTP/1.1
+Host: 192.168.1.100:5000
+User-Agent: Angular-HttpClient/17.0.0
+Accept: application/json
+
+\end{lstlisting}
+
+\textit{Resposta HTTP retornada pelo Servidor Flask com payload JSON:}
+\begin{lstlisting}
+HTTP/1.1 200 OK
+Server: Werkzeug/3.0.1 Python/3.10.12
+Date: Mon, 29 Sep 2026 14:30:00 GMT
+Content-Type: application/json
+Content-Length: 215
+Connection: close
+
+[
+  {
+    "id": 14,
+    "data_agendamento": "2026-09-29",
+    "hora_inicio": "08:00:00",
+    "hora_fim": "08:30:00",
+    "duracao_minutos": 30,
+    "solenoide": "Setor 1",
+    "usuario": "Thiago",
+    "status": "AGENDADO"
+  }
+]
+\end{lstlisting}
+
+\textbf{Exemplo 1.2: Consulta de Agendamento Específico por ID (\texttt{GET /agendamentos/14})}
+
+\textit{Requisição HTTP enviada pelo cliente:}
+\begin{lstlisting}
+GET /agendamentos/14 HTTP/1.1
+Host: 192.168.1.100:5000
+User-Agent: Mozilla/5.0 (Android; Mobile)
+Accept: application/json
+
+\end{lstlisting}
+
+\textit{Resposta HTTP retornada pelo Servidor Flask:}
+\begin{lstlisting}
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: 182
+
+{
+  "data_agendamento": "2026-09-29",
+  "duracao_minutos": 30,
+  "hora_fim": "08:30:00",
+  "hora_inicio": "08:00:00",
+  "id": 14,
+  "solenoide": "Setor 1",
+  "status": "AGENDADO",
+  "usuario": "Thiago"
+}
+\end{lstlisting}
+
+\paragraph*{B. Método POST (Criação de Recursos e Processamento de Ordens)}
+
+\textbf{Explicação Didática:} O método \texttt{POST} equivale a preencher uma nova ficha de ordem de serviço e entregá-la no balcão da fazenda para registro. O cliente diz ao servidor: \textit{"Tome este bloco de dados em JSON, processe-o e crie um novo recurso no banco de dados"}.
+
+\textbf{Propriedades Formais:} Seguro = \textbf{NÃO} $|$ Idempotente = \textbf{NÃO}. Se o cliente enviar uma requisição \texttt{POST /agendamentos} 3 vezes seguidas, o servidor criará 3 agendamentos distintos no banco de dados com IDs diferentes (ex.: IDs 14, 15 e 16).
+
+\textbf{Funcionamento Interno no Backend:} O servidor Flask recebe o payload JSON no corpo da mensagem, decodifica os campos obrigatórios (\texttt{data\_agendamento}, \texttt{hora\_inicio}, \texttt{hora\_fim}, \texttt{duracao\_minutos}, \texttt{solenoide}, \texttt{usuario}), executa uma instrução SQL \texttt{INSERT INTO agendamentos ...}, obtém o novo ID gerado pelo MySQL, realiza o \texttt{commit()} na transação e retorna a representação do recurso criado acompanhada do código \texttt{200 OK} ou \texttt{201 Created}.
+
+\textbf{Exemplo 2.1: Cadastro de Nova Programação de Irrigação (\texttt{POST /agendamentos})}
+
+\textit{Requisição HTTP enviada pela aplicação cliente:}
+\begin{lstlisting}
+POST /agendamentos HTTP/1.1
+Host: 192.168.1.100:5000
+User-Agent: Angular-HttpClient/17.0.0
+Content-Type: application/json
+Accept: application/json
+Content-Length: 178
+
+{
+  "data_agendamento": "2026-09-29",
+  "hora_inicio": "14:00:00",
+  "hora_fim": "14:45:00",
+  "duracao_minutos": 45,
+  "solenoide": "Setor 2",
+  "usuario": "Sergio",
+  "status": "AGENDADO"
+}
+\end{lstlisting}
+
+\textit{Resposta HTTP retornada pelo Servidor Flask:}
+\begin{lstlisting}
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: 182
+
+{
+  "data_agendamento": "2026-09-29",
+  "duracao_minutos": 45,
+  "hora_fim": "14:45:00",
+  "hora_inicio": "14:00:00",
+  "id": 15,
+  "solenoide": "Setor 2",
+  "status": "AGENDADO",
+  "usuario": "Sergio"
+}
+\end{lstlisting}
+
+\textbf{Exemplo 2.2: Acionamento Manual da Bomba via Parâmetro (\texttt{POST /bomba?ativo=true})}
+
+\textit{Requisição HTTP enviada pelo cliente móvel:}
+\begin{lstlisting}
+POST /bomba?ativo=true HTTP/1.1
+Host: 192.168.1.100:5000
+User-Agent: ESP32-IrrigaClient/1.0
+Content-Length: 0
+
+\end{lstlisting}
+
+\textit{Resposta HTTP retornada pelo Servidor Flask:}
+\begin{lstlisting}
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: 48
+
+{
+  "ativo": true,
+  "message": "Bomba atualizada"
+}
+\end{lstlisting}
+
+\paragraph*{C. Método PUT (Substituição Integral e Recriação do Estado)}
+
+\textbf{Explicação Didática:} O método \texttt{PUT} equivale a retirar uma ficha antiga do fichário e colocar uma nova ficha totalmente preenchida em seu lugar sob a mesma identificação. O cliente ordena: \textit{"Substitua todos os atributos deste agendamento especificamente identificador pelo ID pelo objeto completo que estou enviando no corpo."}
+
+\textbf{Propriedades Formais:} Seguro = \textbf{NÃO} $|$ Idempotente = \textbf{SIM}. Reenviar a mesma requisição \texttt{PUT} 10 vezes resultará exatamente na mesma representação armazenada no registro do banco.
+
+\textbf{Funcionamento Interno no Backend:} O backend verifica a existência do ID informado na URL. Se localizado, executa um comando SQL \texttt{UPDATE agendamentos SET data\_agendamento = ..., hora\_inicio = ..., hora\_fim = ..., duracao\_minutos = ..., solenoide = ..., usuario = ..., status = ... WHERE id = :id}. Se o registro não existir, o método \texttt{PUT} pode criar o recurso com o ID especificado.
+
+\textbf{Exemplo 3.1: Substituição Completa de um Agendamento (\texttt{PUT /agendamentos/15})}
+
+\textit{Requisição HTTP enviada pelo cliente:}
+\begin{lstlisting}
+PUT /agendamentos/15 HTTP/1.1
+Host: 192.168.1.100:5000
+Content-Type: application/json
+Content-Length: 178
+
+{
+  "data_agendamento": "2026-09-29",
+  "hora_inicio": "15:00:00",
+  "hora_fim": "16:00:00",
+  "duracao_minutos": 60,
+  "solenoide": "Setor 2",
+  "usuario": "Sergio",
+  "status": "REAGENDADO"
+}
+\end{lstlisting}
+
+\textit{Resposta HTTP retornada pelo Servidor Flask:}
+\begin{lstlisting}
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: 184
+
+{
+  "data_agendamento": "2026-09-29",
+  "duracao_minutos": 60,
+  "hora_fim": "16:00:00",
+  "hora_inicio": "15:00:00",
+  "id": 15,
+  "solenoide": "Setor 2",
+  "status": "REAGENDADO",
+  "usuario": "Sergio"
+}
+\end{lstlisting}
+
+\paragraph*{D. Método PATCH (Modificação Parcial e Direcionada)}
+
+\textbf{Explicação Didática:} O método \texttt{PATCH} equivale a pegar um lápis e alterar apenas uma única linha ou campo específico em um formulário impresso (ex.: modificar somente o status da irrigação), preservando intactos todos os demais horários e nomes já gravados.
+
+\textbf{Propriedades Formais:} Seguro = \textbf{NÃO} $|$ Idempotente = \textbf{SIM} (quando aplica mutações determinísticas em atributos isolados).
+
+\textbf{Funcionamento Interno no Backend:} O backend analisa quais chaves foram enviadas no payload JSON de tamanho reduzido, gera dinamicamente uma instrução SQL cirúrgica (ex.: \texttt{UPDATE agendamentos SET status = :status WHERE id = :id}) e atualiza apenas a coluna solicitada no MySQL.
+
+\textbf{Exemplo 4.1: Atualização Parcial do Status da Irrigação (\texttt{PATCH /agendamentos/15})}
+
+\textit{Requisição HTTP enviada pelo cliente:}
+\begin{lstlisting}
+PATCH /agendamentos/15 HTTP/1.1
+Host: 192.168.1.100:5000
+Content-Type: application/json
+Content-Length: 26
+
+{
+  "status": "EXECUTADO"
+}
+\end{lstlisting}
+
+\textit{Resposta HTTP retornada pelo Servidor Flask:}
+\begin{lstlisting}
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: 64
+
+{
+  "id": 15,
+  "message": "Status do agendamento 15 alterado para EXECUTADO"
+}
+\end{lstlisting}
+
+\paragraph*{E. Método DELETE (Remoção e Cancelamento)}
+
+\textbf{Explicação Didática:} O método \texttt{DELETE} equivale a destruir uma ficha de agendamento ou cancelá-la definitivamente. O cliente ordena ao servidor: \textit{"Remova este recurso especifico da base de dados"}.
+
+\textbf{Propriedades Formais:} Seguro = \textbf{NÃO} $|$ Idempotente = \textbf{SIM}. A primeira requisição remove a entidade e responde \texttt{200 OK} ou \texttt{204 No Content}. Requisições subsequentes ao mesmo ID encontram o recurso não mais existente no banco, retornando \texttt{404 Not Found} sem provocar efeitos adicionais.
+
+\textbf{Funcionamento Interno no Backend:} O servidor executa o comando SQL \texttt{DELETE FROM agendamentos WHERE id = :id}, verifica a contagem de linhas afetadas na tabela MySQL e confirma a transação.
+
+\textbf{Exemplo 5.1: Exclusão de um Agendamento de Irrigação (\texttt{DELETE /agendamentos/15})}
+
+\textit{Requisição HTTP enviada pelo cliente:}
+\begin{lstlisting}
+DELETE /agendamentos/15 HTTP/1.1
+Host: 192.168.1.100:5000
+User-Agent: Angular-HttpClient/17.0.0
+Accept: application/json
+
+\end{lstlisting}
+
+\textit{Resposta HTTP retornada pelo Servidor Flask:}
+\begin{lstlisting}
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: 48
+
+{
+  "message": "Agendamento 15 removido com sucesso"
+}
+\end{lstlisting}
+
+\paragraph*{F. Método HEAD (Inspeção de Metadados sem Transmissão de Corpo)}
+
+\textbf{Explicação Didática:} O método \texttt{HEAD} equivale a dar um telefonema rápido para o centro de controle e perguntar apenas: \textit{"Houve modificação na lista de agendamentos e qual é o tamanho atual do arquivo?\"}, desligando a chamada antes de efetuar o download dos dados.
+
+\textbf{Propriedades Formais:} Seguro = \textbf{SIM} $|$ Idempotente = \textbf{SIM}.
+
+\textbf{Uso Didático em IoT:} Microcontroladores com franquia de dados celulares reduzida (cartões SIM M2M/GPRS) ou baterias alimentadas por painel solar enviam requisições \texttt{HEAD} para inspecionar os cabeçalhos \texttt{Content-Length} ou \texttt{Last-Modified}. Se os metadados indicarem que a lista de agendamentos permanece inalterada, o ESP32 economiza energia e largura de banda sem precisar baixar o payload completo.
+
+\textbf{Exemplo 6.1: Consulta de Cabeçalhos e Metadados (\texttt{HEAD /agendamentos})}
+
+\textit{Requisição HTTP enviada pelo dispositivo embarcado ESP32:}
+\begin{lstlisting}
+HEAD /agendamentos HTTP/1.1
+Host: 192.168.1.100:5000
+User-Agent: ESP32-IrrigaClient/1.0
+Accept: application/json
+
+\end{lstlisting}
+
+\textit{Resposta HTTP retornada pelo Servidor Flask (observe a ausência total de corpo):}
+\begin{lstlisting}
+HTTP/1.1 200 OK
+Server: Werkzeug/3.0.1 Python/3.10.12
+Content-Type: application/json
+Content-Length: 1250
+Connection: close
+
+\end{lstlisting}
+
+\paragraph*{G. Método OPTIONS (Negociação de Capacidades e CORS Preflight)}
+
+\textbf{Explicação Didática:} O método \texttt{OPTIONS} equivale a um cumprimento formal entre o navegador do usuário e o servidor Flask antes do envio de comandos operacionais. O navegador pergunta: \textit{"Quais métodos e cabeçalhos você aceita para esta rota? Posso enviar um POST com JSON oriundo de um domínio externo?"}.
+
+\textbf{Propriedades Formais:} Seguro = \textbf{SIM} $|$ Idempotente = \textbf{SIM}.
+
+\textbf{Mecanismo CORS Preflight:} Quando o painel web Angular em \texttt{http://localhost:4200} tenta enviar um \texttt{POST} para o servidor Flask em \texttt{http://192.168.1.100:5000}, a política de mesma origem do navegador intercepta o envio e dispara automaticamente uma requisição \texttt{OPTIONS} (\textit{Preflight}). O servidor Flask responde com os cabeçalhos \texttt{Access-Control-Allow-Methods} e \texttt{Access-Control-Allow-Origin}, autorizando formalmente o envio da requisição principal.
+
+\textbf{Exemplo 7.1: Requisição de Pré-Verificação CORS Preflight (\texttt{OPTIONS /agendamentos})}
+
+\textit{Requisição OPTIONS enviada automaticamente pelo navegador:}
+\begin{lstlisting}
+OPTIONS /agendamentos HTTP/1.1
+Host: 192.168.1.100:5000
+Origin: http://localhost:4200
+Access-Control-Request-Method: POST
+Access-Control-Request-Headers: Content-Type
+
+\end{lstlisting}
+
+\textit{Resposta HTTP retornada pelo Servidor Flask com autorizações CORS:}
+\begin{lstlisting}
+HTTP/1.1 200 OK
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+Access-Control-Allow-Headers: Content-Type, Authorization
+Content-Length: 0
+
+\end{lstlisting}
+
+\subsubsection*{1.2.3. Síntese Comparativa das Propriedades dos Verbos HTTP}
+
+A Tabela 2 apresenta a síntese comparativa das propriedades técnicas, operacionais e de rede de cada um dos verbos HTTP analisados na semântica RESTful do sistema de irrigação.
+
+\begin{table}[h!]
+\centering
+\fontsize{9}{11}\selectfont
+\caption{Propriedades formais, operacionais e semânticas dos verbos HTTP na arquitetura de irrigação.}
+\begin{tabular}{|l|l|c|c|c|c|l|}
+\hline
+\textbf{Método} & \textbf{Operação CRUD} & \textbf{Seguro?} & \textbf{Idempotente?} & \textbf{Corpo Req.?} & \textbf{Corpo Resp.?} & \textbf{Status Típico} \\ \hline
+\texttt{GET} & Read (Leitura) & SIM & SIM & Não & SIM & 200 OK \\ \hline
+\texttt{POST} & Create (Criação/Ação) & NÃO & NÃO & SIM & SIM & 200 OK / 201 Created \\ \hline
+\texttt{PUT} & Update (Substituição) & NÃO & SIM & SIM & SIM & 200 OK / 204 No Content \\ \hline
+\texttt{PATCH} & Update (Parcial) & NÃO & SIM* & SIM & SIM & 200 OK \\ \hline
+\texttt{DELETE} & Delete (Exclusão) & NÃO & SIM & Não & Opção & 200 OK / 204 No Content \\ \hline
+\texttt{HEAD} & Read Metadados & SIM & SIM & Não & NÃO & 200 OK \\ \hline
+\texttt{OPTIONS} & Inspect Capacidades & SIM & SIM & Opção & Não & 200 OK \\ \hline
+\end{tabular}
+\end{table}
+
+\subsection*{1.3. Códigos de Status HTTP: Respostas, Diagnósticos e Gestão de Estado}
+
+Na comunicação entre o servidor backend de gerenciamento (\texttt{backend-irriga}) e os diversos clientes conectados (aplicação web em Angular, aplicativos móveis e nós embarcados em ESP32 e Arduino), a mensagem de resposta HTTP desempenha um papel crítico no fechamento do ciclo de requisição. Além do corpo de dados formatado em JSON, a primeira linha da resposta transmitida pelo servidor contém a identificação da versão do protocolo acompanhada de um código de status HTTP (\textit{HTTP Status Code}) e de uma frase de razão (\textit{Reason Phrase}) associada.
+
+Conforme estabelecido pela especificação formal RFC 9110 do IETF, os códigos de status são valores numéricos inteiros constituídos por exatamente três dígitos (FIELDING; NOTTINGHAM; RESCHKE, 2022a). O primeiro dígito define a classe ou família da resposta, enquanto os dois dígitos subsequentes identificam a condição específica decorrente do processamento interno no servidor. Para entusiastas da computação e das ciências agrárias, a compreensão desses códigos é fundamental, pois eles fornecem a semântica precisa necessária para a implementação de algoritmos de tomada de decisão no firmware de nós de campo e no código do frontend web.
+
+\subsubsection*{1.3.1. Taxonomia das Famílias de Códigos de Status HTTP}
+
+A RFC 9110 organiza os códigos de status em cinco famílias principais, categorizadas de acordo com o intervalo do valor numérico inicial. A Tabela 1 apresenta a taxonomia completa dessas classes aplicada ao contexto da automação agrícola.
+
+\begin{table}[h!]
+\centering
+\fontsize{9}{11}\selectfont
+\caption{Taxonomia e classificação das famílias de códigos de status HTTP em sistemas de irrigação.}
+\begin{tabular}{|c|p{3.2cm}|p{8.5cm}|}
+\hline
+\textbf{Faixa} & \textbf{Classe de Resposta} & \textbf{Significado e Aplicação no Contexto Agrícola IoT} \\ \hline
+\texttt{1xx} & Informacional (\textit{Informational}) & Indica que a requisição foi recebida e o servidor está prosseguindo com o processamento intermediário (ex.: negociação de protocolo para WebSockets). \\ \hline
+\texttt{2xx} & Sucesso (\textit{Successful}) & Confirma que a ação solicitada pelo cliente foi recebida, compreendida, aceita e executada com êxito pelo servidor. \\ \hline
+\texttt{3xx} & Redirecionamento (\textit{Redirection}) & Informa que ações adicionais são necessárias pelo cliente para concluir a requisição (ex.: consulta de dados em cache não modificados). \\ \hline
+\texttt{4xx} & Erro do Cliente (\textit{Client Error}) & Sinaliza que a requisição contém sintaxe incorreta, parâmetros ausentes, dados inválidos ou falta de autorização no envio. \\ \hline
+\texttt{5xx} & Erro do Servidor (\textit{Server Error}) & Indica que o servidor falhou ao tentar atender a uma requisição válida devido a falhas internas no código Python ou no MySQL. \\ \hline
+\end{tabular}
+\end{table}
+
+A seguir, cada uma das famílias de códigos de status é analisada em detalhe em formato contínuo de prosa, destacando os códigos de maior relevância prática para o projeto de automação de irrigação.
+
+\paragraph*{A. Respostas de Sucesso (Classe 2xx)}
+
+As respostas da classe 2xx indicam que a operação transcorreu conforme o esperado na API do backend. O código mais representativo é o \textbf{200 OK}, emitido em resposta a requisições \texttt{GET} bem-sucedidas (como a recuperação da lista de agendamentos ou do estado geral dos atuadores), requisições \texttt{PUT} ou \texttt{PATCH} que retornam a representação atualizada da entidade, e requisições \texttt{OPTIONS} no fluxo CORS.
+
+Quando o cliente envia uma solicitação do tipo \texttt{POST /agendamentos} contendo os dados de uma nova irrigação e a API persiste o registro com sucesso no MySQL, o servidor deve retornar o código \textbf{201 Created}. Esse código é acompanhado do cabeçalho \texttt{Location}, indicando a URI do novo recurso criado (ex.: \texttt{/agendamentos/16}), além de retornar no corpo JSON o objeto completo contendo o identificador numérico auto-incrementado gerado pelo banco.
+
+Em operações nas quais o processamento é aceito para execução assíncrona — como o acionamento de um ciclo prolongado de fertirrigação que será controlado por uma fila de tarefas em segundo plano —, o servidor responde com \textbf{202 Accepted}. Por fim, em requisições de remoção via \texttt{DELETE /agendamentos/15} ou atualizações via \texttt{PUT} que não necessitam retornar dados no corpo, utiliza-se o código \textbf{204 No Content}, que confirma a execução da instrução e economiza tráfego de dados ao omitir o payload de resposta.
+
+\paragraph*{B. Respostas de Redirecionamento e Otimização de Banda (Classe 3xx)}
+
+As respostas da classe 3xx coordenam o redirecionamento de rotas e o reaproveitamento otimizado de recursos na rede. Embora os códigos \textbf{301 Moved Permanently} e \textbf{302 Found} sejam amplamente empregados na navegação Web convencional para redirecionar URLs alteradas, a resposta mais valiosa para a Internet das Coisas agrícola é o código \textbf{304 Not Modified}.
+
+Em fazendas onde nós embarcados ESP32 efetuam consultas periódicas (\textit{polling}) a cada 10 segundos para verificar se houve mudanças na tabela de agendamentos, o envio contínuo da resposta \texttt{200 OK} contendo a lista completa em JSON consome largura de banda e bateria de forma desnecessária. Utilizando o cabeçalho condicional \texttt{If-None-Match} acompanhado do hash \texttt{ETag} (ou o cabeçalho \texttt{If-Modified-Since}), o servidor compara o estado atual da base de dados com a versão gravada no nó embarcado. Caso nenhuma alteração tenha ocorrido, o backend responde imediatamente com \textbf{304 Not Modified} e corpo nulo, permitindo que o microcontrolador confirme a ausência de novas ordens sem arcar com o custo de tráfego do payload.
+
+\paragraph*{C. Respostas de Erro do Cliente e Validação de Domínio (Classe 4xx)}
+
+As respostas da classe 4xx indicam que a falha na comunicação foi originada por uma requisição inadequada enviada pelo cliente. O código \textbf{400 Bad Request} é retornado quando a requisição apresenta erros de sintaxe (como um JSON malformado contendo chaves sem aspas) ou omissão de campos obrigatórios (por exemplo, enviar uma requisição \texttt{POST /agendamentos} sem informar o campo \texttt{duracao\_minutos}).
+
+O tratamento de segurança e autenticação baseia-se nos códigos \textbf{401 Unauthorized} e \textbf{403 Forbidden}. O código \textbf{401 Unauthorized} informa que o cliente não forneceu as credenciais de autenticação necessárias, tais como a ausência do token JWT no cabeçalho \texttt{Authorization: Bearer}. O código \textbf{403 Forbidden}, por sua vez, indica que o cliente foi autenticado com sucesso, porém não possui permissão de acesso para executar aquela operação específica (como um perfil de operador de campo tentando reconfigurar parâmetros de administração global do sistema).
+
+Quando uma aplicação tenta acessar um recurso inexistente ou uma rota não mapeada no backend (como \texttt{GET /agendamentos/999}), a API retorna \textbf{404 Not Found}. Em cenários nos quais ocorre violação de regras de negócio — por exemplo, quando se tenta agendar uma irrigação no setor 1 para um horário em que a mesma válvula solenoide já está alocada para outro agendamento —, o servidor responde com o código \textbf{409 Conflict}. Por fim, em validações semânticas avançadas de domínio, quando a estrutura do JSON é sintaticamente perfeita mas contém valores inconsistentes no mundo real (como definir uma duração de irrigação negativa \texttt{"duracao\_minutos": -15} ou uma data já ultrapassada), o backend Flask utiliza o código \textbf{422 Unprocessable Entity}.
+
+\paragraph*{D. Respostas de Erro do Servidor e Falhas de Infraestrutura (Classe 5xx)}
+
+As respostas da classe 5xx sinalizam que o cliente enviou uma requisição válida, porém o servidor backend não conseguiu processá-la devido a falhas internas na infraestrutura do sistema. O código \textbf{500 Internal Server Error} representa a exceção genérica do servidor, ocorrendo quando o código Python Flask lança um erro não tratado (como uma divisão por zero, referência nula a um objeto ou falha na instrução SQL executada via SQLAlchemy).
+
+O código \textbf{502 Bad Gateway} é gerado por servidores de proxy reverso (como Nginx ou Apache) situados à frente do servidor backend quando o processo interno da aplicação em Python congela ou encerra inesperadamente. O código \textbf{503 Service Unavailable} sinaliza que o servidor está temporariamente incapaz de atender a requisições devido à sobrecarga de conexões ou manutenção agendada no banco MySQL. Por fim, o código \textbf{504 Gateway Timeout} ocorre quando o gateway intermediário não recebe uma resposta do servidor de banco de dados dentro do intervalo limite estabelecido, indicando gargalos graves de latência na rede interna da fazenda.
+
+\subsubsection*{1.3.2. Mapeamento Operacional e Matriz de Mitigação em Firmware e Frontend}
+
+Para garantir que o sistema de irrigação permaneça estável e resiliente diante de falhas de comunicação, o firmware dos nós ESP32 e o código da aplicação Angular devem ser programados para reagir de forma diferenciada a cada código de status recebido. A Tabela 2 sintetiza as ações operacionais e as estratégias de mitigação adotadas na arquitetura.
+
+\begin{table}[h!]
+\centering
+\fontsize{9}{11}\selectfont
+\caption{Matriz de mitigação e tratamento de códigos de status HTTP nos clientes IoT.}
+\begin{tabular}{|c|l|p{4.2cm}|p{5.5cm}|}
+\hline
+\textbf{Código} & \textbf{Descrição} & \textbf{Causa Típica no Sistema IoT} & \textbf{Ação Recomendada nos Clientes (ESP32 / Angular)} \\ \hline
+\texttt{200 OK} & Sucesso & Operação de leitura ou atualização concluída com êxito. & Atualizar variáveis locais e estado dos relés; apresentar confirmação na interface. \\ \hline
+\texttt{201 Created} & Criado & Novo agendamento inserido no MySQL. & Atualizar ID local; redirecionar a navegação no painel Angular para a lista. \\ \hline
+\texttt{304 Not Mod.} & Não Alterado & Nenhuma mudança nos agendamentos desde a última consulta. & Manter programação em memória no ESP32; manter relés no estado atual e aguardar novo ciclo. \\ \hline
+\texttt{400 Bad Req.} & Dados Inválidos & JSON malformado ou parâmetros obrigatórios ausentes. & Não retransmitir a mensagem; emitir alerta de erro de validação de formulário ao usuário. \\ \hline
+\texttt{401 / 403} & Não Autorizado & Token JWT ausente, expirado ou sem permissão. & Redirecionar usuário para tela de login; solicitar renovação do token de acesso. \\ \hline
+\texttt{404 Not Found} & Não Encontrado & ID de agendamento ou rota de API inexistente. & Remover item da interface gráfica; emitir mensagem de recurso não localizado. \\ \hline
+\texttt{409 / 422} & Conflito / Erro & Choque de horários ou valores fora da faixa permitida. & Exibir mensagem didática ao agricultor sugerindo outro horário ou ajuste nos parâmetros. \\ \hline
+\texttt{500 / 503} & Erro Servidor & Indisponibilidade no Flask ou queda de conexão no MySQL. & Iniciar retentativas com backoff exponencial; ativar salvaguarda temporizada no ESP32. \\ \hline
+\end{tabular}
+\end{table}
+
+\subsubsection*{1.3.3. Algoritmo de Tomada de Decisão em Nó Embarcado ESP32}
+
+A inteligência de campo de um nó microcontrolado reside na sua capacidade de interpretar os códigos de status retornados pelo servidor central e agir autonomamente para proteger a lavoura. A Figura 1 ilustra a máquina de estados e o fluxograma de decisão executado pelo firmware em linguagem C++ do ESP32 a cada resposta HTTP recebida.
+
+\vspace{1em}
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[
+    node distance=1.6cm and 1.8cm,
+    startstop/.style={rectangle, draw=editorablue, fill=editorablue!15, thick, rounded corners, minimum width=3cm, minimum height=1cm, align=center, font=\fontsize{9}{11}\selectfont\bfseries},
+    decision/.style={diamond, draw=orange!80!black, fill=orange!10, thick, aspect=2, minimum width=2.8cm, minimum height=1.2cm, align=center, font=\fontsize{8}{10}\selectfont},
+    process/.style={rectangle, draw=green!60!black, fill=green!10, thick, rounded corners, minimum width=3.2cm, minimum height=1.1cm, align=center, font=\fontsize{8}{10}\selectfont},
+    errorblock/.style={rectangle, draw=red!80!black, fill=red!10, thick, rounded corners, minimum width=3.2cm, minimum height=1.1cm, align=center, font=\fontsize{8}{10}\selectfont},
+    line/.style={draw, -{Latex[scale=1.2]}, thick}
+]
+
+% Nós do fluxograma
+\node[startstop] (init) {Consulta HTTP\\(\texttt{GET /estado-geral})};
+\node[decision, below=1.2cm of init] (check_code) {Qual é o Código\\de Status HTTP?};
+
+% Caminhos de decisão
+\node[process, right=2.5cm of check_code] (code_200) {\textbf{200 OK}\\Decodificar JSON e\\atualizar relés e solenoides};
+\node[process, above right=0.8cm and 2.5cm of check_code] (code_304) {\textbf{304 Not Modified}\\Manter relés no estado\\atual e dormir (Sleep)};
+\node[errorblock, below right=0.8cm and 2.5cm of check_code] (code_4xx) {\textbf{4xx Erro Cliente}\\Registrar log interno;\\não retransmitir payload};
+\node[errorblock, below=2.0cm of check_code] (code_5xx) {\textbf{5xx Erro Servidor}\\Incrementar contador;\\Backoff Exponencial};
+\node[errorblock, left=2.2cm of check_code] (timeout_err) {\textbf{Sem Resposta / Timeout}\\Ativar protocolo Fail-Safe;\\Desligar relés da bomba};
+
+% Conexões
+\draw[line] (init) -- (check_code);
+\draw[line] (check_code) -- node[above, font=\tiny\bfseries] {200 OK} (code_200);
+\draw[line] (check_code) |- node[above, font=\tiny\bfseries] {304} (code_304);
+\draw[line] (check_code) |- node[above, font=\tiny\bfseries] {4xx} (code_4xx);
+\draw[line] (check_code) -- node[left, font=\tiny\bfseries] {5xx} (code_5xx);
+\draw[line] (check_code) -- node[above, font=\tiny\bfseries] {Timeout / Falha} (timeout_err);
+
+\end{tikzpicture}
+\caption{Fluxograma de decisão do firmware ESP32 para tratamento de códigos de status HTTP.}
+\end{figure}
+
+\vspace{1em}
+
+Como observado no fluxograma da Figura 1, caso a resposta seja \textbf{200 OK}, o microcontrolador decodifica o payload JSON, atualiza os estados dos relés e zera o contador de falhas. Em caso de resposta \textbf{304 Not Modified}, o sistema mantém a operação inalterada e entra em modo de baixo consumo (\textit{Deep Sleep}) até o próximo ciclo. Diante de erros da classe \textbf{4xx}, o firmware evita retentativas inúteis, pois a falha reside na requisição. Já perante respostas de erro do servidor (\textbf{5xx}), o ESP32 aplica a técnica de retentativa com \textit{backoff} exponencial. Se a falha persistir por mais de três minutos ou se houver perda total de conectividade de rede (\textit{Timeout}), o mecanismo autônomo de \textit{Fail-Safe} é disparado, desligando imediatamente as válvulas solenoides e a bomba hidráulica para prevenir danos à lavoura.
+
+\newpage
+
+\section*{2. ARQUITETURA MULTICLIENTE PARA IRRIGAÇÃO AUTOMATIZADA}
+
+Um sistema moderno de irrigação inteligente deve atender a múltiplos perfis de acesso e diferentes restrições operacionais. A arquitetura proposta conecta quatro categorias distintas de clientes ao servidor central HTTP de irrigação (\texttt{backend-irriga}), como ilustrado na Figura 1.
+
+\vspace{1em}
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[
+    node distance=1.8cm and 2.2cm,
+    block/.style={rectangle, draw=editorablue, fill=editorablue!10, thick, rounded corners, minimum width=2.8cm, minimum height=1.2cm, align=center, font=\fontsize{9}{11}\selectfont},
+    server/.style={rectangle, draw=green!60!black, fill=green!10, thick, rounded corners, minimum width=3.5cm, minimum height=1.5cm, align=center, font=\fontsize{10}{12}\selectfont\bfseries},
+    db/.style={cylinder, draw=orange!80!black, fill=orange!10, thick, cylinder end fill=orange!20, minimum width=2.5cm, minimum height=1.2cm, shape border rotate=90, align=center, font=\fontsize{9}{11}\selectfont},
+    cloud/.style={draw=blue!80, fill=blue!5, thick, rounded corners=15pt, minimum width=12cm, minimum height=6.5cm},
+    line/.style={draw, -{Latex[scale=1.2]}, thick}
+]
+
+% Servidor Central e DB
+\node[server] (server) {Servidor Backend Flask\\(\texttt{backend-irriga:5000})};
+\node[db, right=2.2cm of server] (db) {Banco MySQL\\(\texttt{sistema\_irrigacao})};
+
+% Clientes
+\node[block, above left=1.8cm and 1.5cm of server] (esp32) {\textbf{Cliente ESP32}\\Microcontrolador Wi-Fi\\(Relés e Solenoides)};
+\node[block, below left=1.8cm and 1.5cm of server] (arduino) {\textbf{Cliente Arduino}\\Shield Ethernet W5100\\(Sensores de Solo)};
+\node[block, above right=1.8cm and 1.5cm of server] (web) {\textbf{Cliente Web Angular}\\Dashboard SPA\\(Navegador PC)};
+\node[block, below right=1.8cm and 1.5cm of server] (mobile) {\textbf{Cliente Mobile / PWA}\\Smartphone / Tablet\\(Controle em Campo)};
+
+% Conexões com o Servidor
+\draw[line] (esp32) -- node[above, sloped, font=\tiny] {HTTP GET / POST} (server);
+\draw[line] (arduino) -- node[below, sloped, font=\tiny] {Raw TCP / HTTP} (server);
+\draw[line] (web) -- node[above, sloped, font=\tiny] {REST / JSON (HttpClient)} (server);
+\draw[line] (mobile) -- node[below, sloped, font=\tiny] {REST / HTTPS (PWA)} (server);
+
+% Conexão Servidor -> Banco
+\draw[line, <->] (server) -- node[above, font=\tiny] {SQLAlchemy / SQL} (db);
+
+\end{tikzpicture}
+\caption{Visão geral da arquitetura multicliente de irrigação automatizada IoT operando via protocolo HTTP.}
+\end{figure}
+
+\vspace{1em}
+
+\subsection*{2.1. Organização em Camadas: Cliente Magro versus Cliente Gordo}
+
+Segundo Tanenbaum e Van Steen (2007), em uma arquitetura cliente-servidor de duas ou mais camadas, a distribuição das responsabilidades funcionais ocorre com base na divisão em três níveis fundamentais: o \textbf{Nível de Interface} (apresentação gráfica e interação com o usuário), o \textbf{Nível de Processamento} (regras de negócio e lógica de controle da aplicação) e o \textbf{Nível de Dados} (armazenamento e gerenciamento em banco de dados). Com base no grau de deslocamento do processamento do servidor para o dispositivo cliente, Tanenbaum e Van Steen (2007) apresentam os modelos de \textbf{Cliente Magro} (\textit{thin client}) e \textbf{Cliente Gordo} (\textit{fat client} ou \textit{thick client}) como alternativas de organização de arquiteturas distribuídas.
+
+\subsubsection*{A. Cliente Magro (\textit{Thin Client})}
+
+O cliente magro (\textit{thin client}) é uma arquitetura na qual o computador ou dispositivo cliente possui uma implementação reduzida, geralmente limitada à apresentação da interface e à interação básica com o usuário, enquanto o processamento da aplicação e o acesso aos dados são realizados predominantemente no servidor (TANENBAUM; VAN STEEN, 2007).
+
+\textit{Formulação acadêmica:} O cliente magro é uma configuração cliente-servidor na qual o cliente implementa principalmente a camada de interface com o usuário, enquanto o servidor executa as camadas de processamento e de dados (TANENBAUM; VAN STEEN, 2007).
+
+Nessa configuração, o cliente depende mais intensamente da comunicação constante pela rede com o servidor. Como consequência direta, o equipamento cliente exige significativamente menos recursos computacionais (memória RAM e capacidade de processamento) e apresenta maior facilidade de administração e atualização centralizada. Por outro lado, falhas de comunicação de rede ou a indisponibilidade temporária do servidor podem comprometer o funcionamento da aplicação no cliente. No sistema de irrigação proposto, os microcontroladores ESP32 e Arduino operam primordialmente como clientes magros, limitando-se a consultar o servidor HTTP, ler os sinais e acionar os relés físicos, deixando toda a verificação de regras de agendamento e sincronização com o servidor Flask.
+
+\subsubsection*{B. Cliente Gordo (\textit{Fat Client})}
+
+O cliente gordo (\textit{fat client} ou \textit{thick client}) é uma arquitetura na qual o computador cliente executa não apenas a interface, mas também parte relevante da lógica de processamento da aplicação, deixando ao servidor principalmente a responsabilidade pelo armazenamento, pelo gerenciamento dos dados e por serviços compartilhados (TANENBAUM; VAN STEEN, 2007).
+
+\textit{Formulação acadêmica:} O cliente gordo é uma configuração cliente-servidor na qual o cliente implementa a camada de interface e parte da camada de processamento, enquanto o servidor permanece responsável principalmente pela disponibilização de dados e serviços compartilhados (TANENBAUM; VAN STEEN, 2007).
+
+Essa distribuição reduz a carga de processamento centralizada no servidor e permite que determinadas operações, tais como validações de formulários ou análises preliminares de dados de sensores em tempo real, sejam executadas localmente. Entretanto, a manutenção dessa arquitetura tende a ser mais complexa, pois atualizações de versão, correções de código e requisitos de hardware precisam ser administrados em múltiplos computadores ou dispositivos clientes distribuídos.
+
+\subsubsection*{C. Síntese Comparativa de Arquiteturas}
+
+A Tabela 1 estabelece o confronto direto entre as características das duas abordagens arquiteturais conceituadas por Tanenbaum e Van Steen (2007).
+
+\begin{table}[h!]
+\centering
+\fontsize{10}{12}\selectfont
+\caption{Diferenças principais entre as arquiteturas de Cliente Magro e Cliente Gordo.}
+\begin{tabular}{|p{3.5cm}|p{4.5cm}|p{4.5cm}|}
+\hline
+\textbf{Característica} & \textbf{Cliente Magro (\textit{Thin Client})} & \textbf{Cliente Gordo (\textit{Fat Client})} \\ \hline
+\textbf{Processamento} & Predominantemente realizado no servidor & Parcialmente realizado no cliente \\ \hline
+\textbf{Função do Cliente} & Principalmente apresentar a interface e ler estados & Apresentar a interface e executar parte da aplicação \\ \hline
+\textbf{Dependência da Rede} & Maior (comunicação frequente) & Geralmente menor (operações locais) \\ \hline
+\textbf{Carga no Servidor} & Maior (concentra o processamento) & Menor (processamento distribuído) \\ \hline
+\textbf{Administração} & Mais centralizada e simplificada & Mais distribuída e complexa \\ \hline
+\textbf{Exemplo Prático} & Aplicação acessada via navegador ou nós ESP32/Arduino & Aplicação Desktop/Mobile com lógica local instalada \\ \hline
+\end{tabular}
+\end{table}
+
+\subsection*{2.2. Clientes Embarcados (Edge Hardware): ESP32 e Arduino}
+
+Os clientes de hardware embarcado operam diretamente no campo agrícola. Sua função primária é consultar periodicamente o servidor para sincronizar o estado dos atuadores (bomba hidráulica principal e válvulas solenoides dos setores de plantio) e acionar fisicamente os relés de potência.
+
+No caso do \textbf{microcontrolador ESP32}, equipado com microprocessador Dual-Core de 32 bits e rádio Wi-Fi 802.11 b/g/n embutido, a plataforma consolida-se como o nó ideal para controle de campo. O ESP32 utiliza a biblioteca \texttt{HTTPClient} da linguagem C++ para estabelecer conexões TCP, construir cabeçalhos HTTP e decodificar respostas no formato JSON enviadas pelo servidor Flask.
+
+Por outro lado, na \textbf{plataforma Arduino com Shield Ethernet W5100}, em cenários caracterizados por alta interferência eletromagnética ou onde a infraestrutura cabeada é preferível, utiliza-se o Arduino UNO/Mega acoplado ao módulo W5100. Devido às limitações severas de memória RAM (de 2 KB a 8 KB), o Arduino constrói a mensagem de requisição HTTP manualmente linha a linha via socket TCP (\texttt{EthernetClient}), exigindo um gerenciamento rigoroso do buffer de transmissão.
+
+\subsection*{2.3. Clientes Móveis (Smartphones e Tablets)}
+
+O operador agrícola em campo necessita de mobilidade para inspecionar as lavouras e acionar manualmente setores de irrigação específicos. A aplicação móvel (desenvolvida como um PWA / Progressive Web App ou aplicativo híbrido) envia requisições HTTP REST codificadas em JSON sobre redes móveis 4G/5G ou redes Wi-Fi locais. Isso possibilita ao agricultor visualizar graficamente quais solenoides estão ativas em tempo real e agendar irrigações pontuais direto de seu dispositivo móvel.
+
+\subsection*{2.4. Clientes Web (Navegadores e Painéis de Controle)}
+
+No escritório ou centro de controle, o administrador do sistema utiliza o Dashboard Web desenvolvido na biblioteca Angular. O navegador executa a aplicação Single Page Application (SPA), na qual o módulo \texttt{HttpClient} realiza requisições assíncronas em segundo plano utilizando objetos \texttt{Observable} do RxJS. Todas as requisições transitam no formato JSON, permitindo atualizar a interface gráfica dinamicamente sem recarregar a página web.
+
+\newpage
+
+\section*{3. ESPECIFICAÇÃO DAS REQUISIÇÕES HTTP DO SISTEMA DE IRRIGAÇÃO}
+
+A API REST do backend de irrigação (\texttt{backend-irriga}) fornece rotas padronizadas para leitura e controle dos componentes do sistema. A Tabela 1 sintetiza as principais rotas disponíveis no servidor.
+
+\begin{table}[h!]
+\centering
+\fontsize{10}{12}\selectfont
+\caption{Endpoints HTTP da API de Controle e Agendamento de Irrigação.}
+\begin{tabular}{|l|l|l|p{5.5cm}|}
+\hline
+\textbf{Método} & \textbf{Endpoint} & \textbf{Parâmetros} & \textbf{Descrição} \\ \hline
+\texttt{GET} & \texttt{/bomba} & Nenhum & Sincroniza e retorna o estado atual da bomba principal. \\ \hline
+\texttt{POST} & \texttt{/bomba} & \texttt{ativo=true|false} & Liga ou desliga a bomba principal manualmente. \\ \hline
+\texttt{GET} & \texttt{/solenoides} & Nenhum & Retorna a lista de todas as válvulas solenoides. \\ \hline
+\texttt{POST} & \texttt{/solenoide} & \texttt{id=1\&ativo=true} & Altera o estado de uma válvula solenoide específica. \\ \hline
+\texttt{GET} & \texttt{/estado-geral} & Nenhum & Retorna o status unificado da bomba e de todos os solenoides. \\ \hline
+\texttt{GET} & \texttt{/agendamentos} & Nenhum & Lista todos os agendamentos registrados no banco. \\ \hline
+\texttt{POST} & \texttt{/agendamentos} & Body JSON & Cadastra um novo agendamento de irrigação. \\ \hline
+\end{tabular}
+\end{table}
+
+\subsection*{3.1. Ciclo de Vida da Requisição HTTP}
+
+A comunicação entre qualquer cliente e o servidor obedece à sequência temporal representada no diagrama da Figura 2.
+
+\vspace{1em}
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[
+    font=\fontsize{9}{11}\selectfont,
+    node distance=6.5cm,
+    line/.style={draw, -{Latex[scale=1.0]}, thick}
+]
+
+% Linhas verticais dos atores
+\node (client) {\textbf{Cliente HTTP (ESP32 / Web)}};
+\node (server) [right=of client] {\textbf{Servidor Flask (\texttt{backend-irriga})}};
+
+\draw[thick, gray] (client) -- ++(0,-7.5);
+\draw[thick, gray] (server) -- ++(0,-7.5);
+
+% Etapa 1: TCP Handshake
+\draw[line, blue!80!black] ($(client)+(0,-1.0)$) -- node[above, font=\tiny] {1. TCP SYN (Porta 5000)} ($(server)+(0,-1.0)$);
+\draw[line, blue!80!black] ($(server)+(0,-1.5)$) -- node[above, font=\tiny] {2. TCP SYN-ACK} ($(client)+(0,-1.5)$);
+\draw[line, blue!80!black] ($(client)+(0,-2.0)$) -- node[above, font=\tiny] {3. TCP ACK (Conexão Estabelecida)} ($(server)+(0,-2.0)$);
+
+% Etapa 2: Requisição HTTP
+\draw[line, green!60!black, ultra thick] ($(client)+(0,-3.2)$) -- node[above, font=\tiny\bfseries] {4. HTTP POST /agendamentos (Payload JSON)} ($(server)+(0,-3.2)$);
+
+% Etapa 3: Processamento Backend
+\node[draw=orange, fill=orange!10, rounded corners, font=\tiny, align=center] at ($(server)+(0,-4.5)$) {Processa requisição\\Valida dados SQL\\Executa INSERT no MySQL};
+
+% Etapa 4: Resposta HTTP
+\draw[line, red!70!black, ultra thick] ($(server)+(0,-5.8)$) -- node[above, font=\tiny\bfseries] {5. HTTP 200 OK (Content-Type: application/json)} ($(client)+(0,-5.8)$);
+
+% Etapa 5: Encerramento TCP
+\draw[line, gray] ($(client)+(0,-6.8)$) -- node[above, font=\tiny] {6. TCP FIN / Closure} ($(server)+(0,-6.8)$);
+
+\end{tikzpicture}
+\caption{Diagrama de sequência do ciclo de vida da requisição HTTP no sistema de irrigação.}
+\end{figure}
+
+\newpage
+
+\subsection*{3.2. Exemplos Práticos de Troca de Mensagens HTTP}
+
+A seguir são apresentados os formatos exatos das mensagens trafegadas na rede para três operações fundamentais do sistema de irrigação.
+
+\subsubsection*{A. Leitura do Estado Unificado do Sistema (\texttt{GET /estado-geral})}
+
+Dispositivos embarcados como o ESP32 efetuam periodicamente requisições \texttt{GET /estado-geral} para verificar se a bomba ou qualquer solenoide deve ser ligada em conformidade com o cronograma de agendamento ativo.
+
+\textbf{Requisição HTTP Enviada pelo Cliente:}
+\begin{lstlisting}[language=bash]
+GET /estado-geral HTTP/1.1
+Host: 192.168.1.100:5000
+User-Agent: ESP32-IrrigaClient/1.0
+Accept: application/json
+Connection: keep-alive
+
+
+\end{lstlisting}
+
+\textbf{Resposta HTTP Retornada pelo Servidor Flask:}
+\begin{lstlisting}
+HTTP/1.1 200 OK
+Server: Werkzeug/3.0.1 Python/3.10.12
+Date: Mon, 29 Sep 2026 14:30:00 GMT
+Content-Type: application/json
+Content-Length: 114
+Connection: close
+
+{
+  "bomba": true,
+  "solenoides": [
+    {"id": 1, "ativo": true},
+    {"id": 2, "ativo": false},
+    {"id": 3, "ativo": false}
+  ]
+}
+\end{lstlisting}
+
+\subsubsection*{B. Acionamento Manual de Solenoide via Query String (\texttt{POST /solenoide})}
+
+Quando o agricultor pressiona o botão de ativação de um setor na interface móvel ou web, o cliente dispara uma requisição \texttt{POST} com os parâmetros de controle anexados à URL.
+
+\textbf{Requisição HTTP Enviada pelo Cliente:}
+\begin{lstlisting}[language=bash]
+POST /solenoide?id=1&ativo=true HTTP/1.1
+Host: 192.168.1.100:5000
+User-Agent: Mozilla/5.0 (Android; Mobile; rv:120.0)
+Accept: application/json
+Content-Length: 0
+
+
+\end{lstlisting}
+
+\textbf{Resposta HTTP Retornada pelo Servidor Flask:}
+\begin{lstlisting}
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: 58
+
+{
+  "ativo": true,
+  "message": "Solenoide 1 atualizado"
+}
+\end{lstlisting}
+
+\newpage
+
+\subsubsection*{C. Cadastro de Novo Agendamento de Irrigação (\texttt{POST /agendamentos})}
+
+Para programar uma irrigação automática, o aplicativo cliente envia uma requisição \texttt{POST /agendamentos} contendo um payload estruturado em JSON no corpo da mensagem.
+
+\textbf{Requisição HTTP Enviada pelo Cliente Web/Mobile:}
+\begin{lstlisting}
+POST /agendamentos HTTP/1.1
+Host: 192.168.1.100:5000
+User-Agent: Angular-HttpClient/17.0.0
+Content-Type: application/json
+Accept: application/json
+Content-Length: 178
+
+{
+  "data_agendamento": "2026-09-29",
+  "hora_inicio": "08:00:00",
+  "hora_fim": "08:30:00",
+  "duracao_minutos": 30,
+  "solenoide": "Setor 1",
+  "usuario": "Thiago",
+  "status": "AGENDADO"
+}
+\end{lstlisting}
+
+\textbf{Resposta HTTP Retornada pelo Servidor Flask:}
+\begin{lstlisting}
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: 182
+
+{
+  "data_agendamento": "2026-09-29",
+  "duracao_minutos": 30,
+  "hora_fim": "08:30:00",
+  "hora_inicio": "08:00:00",
+  "id": 14,
+  "solenoide": "Setor 1",
+  "status": "AGENDADO",
+  "usuario": "Thiago"
+}
+\end{lstlisting}
+
+\newpage
+
+\section*{4. CONSIDERAÇÕES SOBRE SEGURANÇA, CORS E RESILIÊNCIA EM CAMPO}
+
+A operação de sistemas de automação de irrigação via HTTP em ambientes agrícolas impõe desafios técnicos específicos que devem ser tratados na arquitetura do sistema:
+
+\subsection*{5.1. Suporte a CORS (Cross-Origin Resource Sharing)}
+
+Como a aplicação web frontend em Angular é executada no navegador do usuário (em uma origem ou porta distinta da API Flask), o servidor backend deve obrigatoriamente retornar os cabeçalhos de política CORS apropriados. Sem esses cabeçalhos, o navegador bloqueia as requisições AJAX por razões de segurança. No servidor Flask, a política é ativada via extensão \texttt{flask\_cors}:
+
+\begin{lstlisting}[language=Python]
+from flask_cors import CORS
+app = Flask(__name__)
+CORS(app, expose_headers=["X-Filename", "Content-Disposition"])
+\end{lstlisting}
+
+\subsection*{5.2. Tratamento de Latência, Timeouts e Reconexão em Nós IoT}
+
+Em redes sem fio rurais (Wi-Fi de longo alcance ou redes móveis de 3ª/4ª geração), flutuações de sinal e desconexões temporárias constituem um desafio frequente. Para garantir a confiabilidade e a estabilidade do sistema de irrigação, os clientes embarcados (ESP32 e Arduino) devem implementar estratégias rigorosas de resiliência.
+
+Primeiramente, estabelece-se a configuração de \textbf{Timeouts Curtos e Reconexão Automática}, na qual os nós embarcados definem um \textit{timeout} máximo de requisição (por exemplo, 3000 ms), evitando que falhas temporárias de conexão travem a execução do loop principal de controle do microcontrolador. 
+
+Adicionalmente, implementa-se um \textbf{Mecanismo de Fail-Safe} autônomo. Caso o microcontrolador ESP32 permaneça por mais de 3 minutos sem conseguir estabelecer comunicação com o servidor HTTP central devido a interrupções na infraestrutura de rede, o código do firmware desativa preventivamente todos os relés de acionamento e fecha as válvulas solenoides. Essa salvaguarda garante a proteção das culturas agrícolas contra o alagamento indevido, impedindo o transbordamento ou o desperdício de água na lavoura.
+
+\vspace{1.5em}
+
+\section*{REFERÊNCIAS}
+
+\begin{singlespace}
+\noindent FIELDING, R. et al. \textbf{Hypertext Transfer Protocol -- HTTP/1.1}. RFC 2616, Internet Engineering Task Force (IETF), 1999.
+
+\vspace{0.8em}
+\noindent FIELDING, Roy T.; NOTTINGHAM, Mark; RESCHKE, Julian. \textbf{HTTP Semantics}. RFC 9110, Internet Engineering Task Force (IETF), jun. 2022. Disponível em: <https://www.rfc-editor.org/rfc/rfc9110>. Acesso em: 28 set. 2026.
+
+\vspace{0.8em}
+\noindent FIELDING, Roy T.; NOTTINGHAM, Mark; RESCHKE, Julian. \textbf{HTTP/1.1}. RFC 9112, Internet Engineering Task Force (IETF), jun. 2022. Disponível em: <https://www.rfc-editor.org/rfc/rfc9112>. Acesso em: 28 set. 2026.
+
+\vspace{0.8em}
+\noindent KRUGER, C. P. \textbf{Automação Agrícola e Internet das Coisas}: Aplicação de Sensores e Microcontroladores no Campo. São Paulo: Editora Técnica, 2024.
+
+\vspace{0.8em}
+\noindent KUROSE, James F.; ROSS, Keith W. \textbf{Redes de computadores e a Internet}: uma abordagem top-down. 5. ed. São Paulo: Pearson, 2010.
+
+\vspace{0.8em}
+\noindent RICHARDSON, L.; RUBY, S. \textbf{RESTful Web Services}. Sebastopol: O'Reilly Media, 2007.
+
+\vspace{0.8em}
+\noindent SANTOS, T. R.; SILVA, M. A. \textbf{Sistemas de Irrigação Inteligentes baseados em ESP32 e Protocolos Web}. Revista Brasileira de Engenharia Agrícola e Ambiental, v. 28, n. 4, p. 210-225, 2025.
+
+\vspace{0.8em}
+\noindent TANENBAUM, Andrew S.; VAN STEEN, Maarten. \textbf{Distributed systems}: principles and paradigms. 2. ed. Upper Saddle River: Pearson Prentice Hall, 2007.
+\end{singlespace}

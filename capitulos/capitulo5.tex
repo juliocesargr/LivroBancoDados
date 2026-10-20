@@ -1,0 +1,306 @@
+% ==============================================================================
+% CAPÍTULO 5: GOVERNANÇA DE DADOS E CONFORMIDADE COM A LGPD NA PRÁTICA
+% ==============================================================================
+
+\begin{center}
+\setstretch{1.0}
+\textbf{\fontsize{14}{16}\selectfont CAPÍTULO 5}
+
+\vspace{0.5em}
+
+\textbf{\fontsize{14}{16}\selectfont GOVERNANÇA DE DADOS E CONFORMIDADE COM A LGPD NA PRÁTICA COM SQL}
+\end{center}
+
+\vspace{1.5em}
+
+\section*{1. CONTEXTUALIZAÇÃO DO TEMA E A IMPORTÂNCIA DO APRENDIZADO}
+
+A consolidação da sociedade da informação e a transformação digital de serviços públicos e privados elevaram os dados pessoais à categoria de direitos fundamentais da personalidade. No Brasil, esse paradigma foi formalizado pela Lei nº 13.709, de 14 de agosto de 2018 (Lei Geral de Proteção de Dados Pessoais -- LGPD), e fortalecido pela Emenda Constitucional nº 115/2022, que incluiu a proteção de dados pessoais no rol de garantias fundamentais da Constituição Federal (BRASIL, 2018, 2022).
+
+Para os profissionais que projetam, desenvolvem e sustentam sistemas computacionais, a conformidade regulatória deixou de ser um tópico restrito aos departamentos jurídicos e tornou-se um **requisito arquitetural compulsório de engenharia de software**. Compreender a governança de dados no nível do SGBD é hoje um dos maiores diferenciais competitivos e uma das exigências mais prementes do mercado de tecnologia.
+
+\subsection*{1.1. A Problemática Crítica da Não Conformidade e Riscos Reais}
+
+A negligência na implementação de mecanismos de privacidade e governança em bancos de dados expõe as organizações a consequências financeiras, operacionais e de reputação sem precedentes:
+\begin{itemize}
+    \item \textbf{Penalidades Financeiras Severas (Art. 52 da LGPD):} O descumprimento das normas sujeita a instituição a multas administrativas aplicadas pela Autoridade Nacional de Proteção de Dados (ANPD) de até **2\% do faturamento da empresa**, limitadas a **R\$ 50.000.000,00 (cinquenta milhões de reais) por infração**, além de multas diárias progressivas.
+    \item \textbf{Interrupção e Bloqueio Operacional:} A ANPD possui competência legal para determinar o bloqueio temporário ou a eliminação compulsória do banco de dados ao qual se refere a infração. Para empresas dependentes de plataformas digitais, tal sanção equivale à paralisação total das atividades empresariais.
+    \item \textbf{O Abismo entre Políticas Documentais e Prática do SGBD:} Um dos erros mais graves observados no mercado consiste em elaborar termos de consentimento e políticas de privacidade formais em papel, enquanto as tabelas do banco continuam sem inventário de finalidade, sem segregação de acessos e sem trilhas de auditoria. Auditorias regulatórias exigem evidências técnicas diretas extraídas do banco de dados, e não apenas declarações de intenção.
+    \item \textbf{Incapacidade Técnica de Atender aos Direitos dos Titulares:} O artigo 18 da LGPD assegura que qualquer titular pode requerer confirmação de tratamento, acesso, correção, portabilidade estruturada e eliminação de seus dados pessoais. Se o banco não foi projetado com chaves rastreáveis e rotinas operacionais preparadas, o tempo de atendimento extrapola os prazos legais, gerando denúncias e litígios judiciais indenizatórios.
+    \item \textbf{Ausência de Prestação de Contas (\textit{Accountability}):} Quando um registro é indevidamente alterado ou subtraído, a ausência de trilhas automáticas de auditoria impede a identificação do agente responsável, transferindo a presunção de culpa e negligência diretamente para os gestores da organização.
+\end{itemize}
+
+O aprendizado deste capítulo capacita o leitor a traduzir os princípios e mandamentos da legislação de privacidade em esquemas relacionais, gatilhos de auditoria invioláveis e comandos SQL que operacionalizam diretamente os direitos dos cidadãos.
+
+\newpage
+
+\section*{2. FUNDAMENTAÇÃO TEÓRICA E JURÍDICO-TECNOLÓGICA DA LGPD}
+
+A proteção de dados pessoais funda-se no princípio da **Autodeterminação Informativa**, que confere ao indivíduo o controle sobre a coleta, utilização e circulação dos seus dados pessoais (BIONI, 2021; DONEDA, 2020).
+
+A LGPD (BRASIL, 2018) estabelece definições rigorosas para os atores e categorias envolvidos no tratamento:
+\begin{itemize}
+    \item \textbf{Titular:} A pessoa natural (física) a quem se referem os dados pessoais que são objeto de tratamento.
+    \item \textbf{Controlador:} Pessoa física ou jurídica a quem competem as decisões fundamentais sobre as finalidades e meios de tratamento dos dados.
+    \item \textbf{Operador:} Pessoa física ou jurídica que realiza o tratamento de dados pessoais em nome e sob as ordens do controlador.
+    \item \textbf{Encarregado pelo Tratamento (DPO -- \textit{Data Protection Officer}):} Indivíduo indicado para atuar como canal de comunicação entre o controlador, os titulares e a autoridade nacional.
+    \item \textbf{Dado Pessoal:} Informação relacionada a pessoa natural identificada ou identificável (art. 5º, I).
+    \item \textbf{Dado Pessoal Sensível:} Dado pessoal sobre origem racial ou étnica, convicção religiosa, opinião política, filiação a sindicato, dado referente à saúde ou à vida sexual, dado genético ou biométrico (art. 5º, II). Essa categoria requer bases legais mais restritivas e medidas de segurança reforçadas.
+\end{itemize}
+
+\subsection*{2.1. Princípios Basilares Aplicados à Engenharia de Dados}
+
+Dentre os princípios esculpidos no art. 6º da legislação, destacam-se para a arquitetura de banco de dados:
+\begin{enumerate}
+    \item \textbf{Princípio da Finalidade:} O tratamento deve ter propósitos legítimos e específicos informados ao titular, vedado o uso posterior divergente.
+    \item \textbf{Princípio da Necessidade (Minimização):} Coleta limitada ao mínimo estritamente indispensável para a realização da finalidade. Tabelas não devem possuir colunas supérfluas.
+    \item \textbf{Princípio da Segurança e Prevenção:} Emprego de medidas técnicas aptas a resguardar os dados de acessos não autorizados.
+    \item \textbf{Princípio da Responsabilização e Prestação de Contas (\textit{Accountability}):} Demonstração pelo controlador de medidas eficazes capazes de comprovar documental e tecnicamente o cumprimento da lei (PINHEIRO, 2020).
+\end{enumerate}
+
+\newpage
+
+\section*{3. INVENTÁRIO DE DADOS E REGISTRO DE FINALIDADE EM SQL}
+
+O alicerce da governança de dados corporativa consiste na catalogação e no inventário formal de dados (\textit{Data Mapping} ou RoPA -- \textit{Record of Processing Activities}).
+
+No SGBD, esse inventário pode ser materializado em uma relação de metadados de governança, associando cada atributo da base à sua categoria jurídica e à respectiva finalidade legal documentada:
+
+\begin{lstlisting}
+USE escola;
+
+-- Tabela de governanca de dados do esquema relacional
+CREATE TABLE inventario_dados (
+    coluna VARCHAR(30) PRIMARY KEY,
+    tipo VARCHAR(10) NOT NULL CHECK (tipo IN ('PESSOAL', 'SENSIVEL')),
+    finalidade VARCHAR(60) NOT NULL
+);
+
+-- Catalogacao das colunas e de seus propositos declarados
+INSERT INTO inventario_dados VALUES
+('nome', 'PESSOAL', 'Identificacao civil do titular'),
+('cpf', 'PESSOAL', 'Obrigacao legal perante orgaos governamentais'),
+('email', 'PESSOAL', 'Canal oficial de comunicacao institucional'),
+('cidade', 'PESSOAL', 'Analise demografica e regional'),
+('saude', 'SENSIVEL', 'Adequacao medica e atendimento emergencial');
+
+SELECT * FROM inventario_dados;
+\end{lstlisting}
+
+Com esse esquema, o banco de dados auto-documenta as finalidades de cada atributo, assegurando conformidade com o princípio da transparência perante auditorias da ANPD.
+
+\newpage
+
+\section*{4. TRILHAS DE AUDITORIA CONTÍNUA COM GATILHOS (TRIGGERS)}
+
+Para satisfazer o princípio da prestação de contas (\textit{accountability}), a organização deve comprovar a rastreabilidade temporal de modificações em dados pessoais, registrando o operador, o evento e o instante da mutação (ANPD, 2021).
+
+\subsection*{4.1. Modelagem da Tabela de Auditoria}
+
+A tabela de auditoria deve operar sob o paradigma de inserção exclusiva (\textit{append-only}), sem permissão de alteração ou exclusão para usuários comuns:
+
+\begin{lstlisting}
+CREATE TABLE log_auditoria (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    usuario VARCHAR(100) NOT NULL,
+    acao VARCHAR(10) NOT NULL,
+    id_titular INT,
+    data_hora DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+\end{lstlisting}
+
+\subsection*{4.2. Implementação do Gatilho AFTER UPDATE}
+
+Utilizamos um gatilho configurado para o momento \texttt{AFTER UPDATE}, garantindo que a gravação do log ocorra apenas se a atualização na tabela mestre de titulares for consumada com êxito:
+
+\begin{lstlisting}
+DELIMITER $$
+
+CREATE TRIGGER audit_titular_upd
+AFTER UPDATE ON titular
+FOR EACH ROW
+BEGIN
+    INSERT INTO log_auditoria (usuario, acao, id_titular)
+    VALUES (CURRENT_USER(), 'UPDATE', NEW.id_titular);
+END$$
+
+DELIMITER ;
+\end{lstlisting}
+
+\subsection*{4.3. Teste Operacional de Auditoria}
+
+\begin{lstlisting}
+-- Simulacao de atualizacao cadastral por um operador
+UPDATE titular
+SET email = 'ana.souza@mail.com'
+WHERE id_titular = 1;
+
+-- Inspecao imediata da trilha de auditoria
+SELECT id, usuario, acao, id_titular, data_hora
+FROM log_auditoria;
+\end{lstlisting}
+
+\textbf{Resultado Retornado pelo SGBD:}
+\begin{lstlisting}
++----+----------------+--------+------------+---------------------+
+| id | usuario        | acao   | id_titular | data_hora           |
++----+----------------+--------+------------+---------------------+
+|  1 | root@localhost | UPDATE |          1 | 2026-10-13 10:45:00 |
++----+----------------+--------+------------+---------------------+
+\end{lstlisting}
+
+\noindent \textbf{Nota Técnica sobre Consultas (SELECT):} Em SQL, gatilhos padrão disparam apenas mediante instruções DML de alteração (\texttt{INSERT}, \texttt{UPDATE}, \texttt{DELETE}). O monitoramento de consultas \texttt{SELECT} envolvendo dados altamente confidenciais deve ser viabilizado por meio do plugin de auditoria do SGBD (como o \textit{MySQL Enterprise Audit}) ou por logs de aplicação integrados ao servidor web.
+
+\newpage
+
+\section*{5. ATENDIMENTO TEMPESTIVO AOS DIREITOS DOS TITULARES}
+
+O art. 18 da LGPD estabelece um catálogo de direitos fundamentais que o titular pode exercer a qualquer momento mediante requisição formal dirigida ao controlador. A seguir, traduzimos os cinco principais direitos do titular em operações transacionais diretas em SQL.
+
+\subsection*{5.1. Direito 1: Confirmação da Existência de Tratamento}
+
+O titular tem o direito de indagar se a instituição possui qualquer dado a seu respeito na base:
+
+\begin{lstlisting}
+-- Verificacao rapida e otimizada por indice do CPF
+SELECT COUNT(*) AS existe_tratamento
+FROM titular
+WHERE cpf = '11111111111';
+\end{lstlisting}
+Se o retorno for superior a zero, o tratamento ativo é formalmente confirmado.
+
+\subsection*{5.2. Direito 2: Acesso aos Dados Cadastrais}
+
+Confirmada a existência, o titular pode exigir a exibição de todas as suas informações custodiadas:
+
+\begin{lstlisting}
+SELECT nome, cpf, email, cidade
+FROM titular
+WHERE cpf = '11111111111';
+\end{lstlisting}
+
+\subsection*{5.3. Direito 3: Correção de Dados Incompletos, Inexatos ou Desatualizados}
+
+O titular tem direito à retificação tempestiva de dados cadastrais incorretos:
+
+\begin{lstlisting}
+UPDATE titular
+SET cidade = 'Jatai'
+WHERE cpf = '11111111111';
+\end{lstlisting}
+
+\subsection*{5.4. Direito 4: Portabilidade dos Dados a Outro Fornecedor de Serviço}
+
+O titular pode solicitar a entrega de seus dados em formato estruturado e interoperável de leitura mecânica. No MySQL 8.0+, isso é atendido de forma imediata e elegante por meio da função nativa de geração JSON:
+
+\begin{lstlisting}
+SELECT JSON_OBJECT(
+    'nome', nome,
+    'cpf', cpf,
+    'email', email,
+    'cidade', cidade
+) AS pacote_portabilidade_json
+FROM titular
+WHERE cpf = '11111111111';
+\end{lstlisting}
+
+O resultado é um objeto JSON padronizado e pronto para integração com qualquer outro sistema ou plataforma externa.
+
+\subsection*{5.5. Direito 5: Eliminação dos Dados Pessoais (Direito ao Esquecimento)}
+
+Ao término da finalidade ou mediante revogação formal de consentimento, o titular pode exigir a exclusão de seus dados pessoais armazenados. Graças à integridade referencial configurada com \texttt{ON DELETE CASCADE} no Capítulo 4, a exclusão na tabela mestre remove automaticamente todos os registros associados em tabelas satélites:
+
+\begin{lstlisting}
+-- Exclusao do registro do titular com CPF '22222222222'
+DELETE FROM titular
+WHERE cpf = '22222222222';
+
+-- Conferencia da limpeza automatica do mapa de pseudonimos
+SELECT * FROM mapa_pseudonimo WHERE id_titular = 2; -- Retorna zero registros!
+SELECT * FROM titular WHERE cpf = '22222222222';     -- Registro eliminado!
+\end{lstlisting}
+
+\newpage
+
+\section*{6. DESAFIO PRÁTICO FINAL E ESTUDO DE CASO CORPORATIVO}
+
+Para consolidar as competências de governança de dados e privacidade, apresentamos o estudo de caso de modelagem e mitigação de riscos.
+
+\subsection*{6.1. Contexto do Problema}
+
+Uma instituição acadêmica e plataforma de comércio eletrônico mantém cadastros de alunos, faturas financeiras e registros médicos de acessibilidade. O conselho diretor exige a adequação imediata aos preceitos da LGPD.
+
+\textbf{Tarefas Solicitadas ao Aluno / DBA:}
+\begin{enumerate}
+    \item Identificar e classificar os atributos entre dados pessoais e dados pessoais sensíveis.
+    \item Mapear os agentes formais de tratamento no cenário institucional.
+    \item Implementar uma medida técnica preventiva em SQL que garanta a privacidade dos titulares em consultas operacionais de suporte.
+\end{enumerate}
+
+\subsection*{6.2. Resolução Comentada do Estudo de Caso}
+
+\subsubsection*{1. Classificação dos Dados Institucionais}
+\begin{itemize}
+    \item \textbf{Dados Pessoais:} Nome completo, CPF, e-mail institucional, endereço residencial e histórico de compras/notas.
+    \item \textbf{Dados Pessoais Sensíveis:} Informações de saúde, laudos médicos e condições especiais (exigindo criptografia AES e isolamento em tabelas com restrição de acesso estrita).
+\end{itemize}
+
+\subsubsection*{2. Mapeamento de Agentes de Tratamento}
+\begin{itemize}
+    \item \textbf{Titular:} Aluno, candidato ao vestibular ou cliente da loja virtual.
+    \item \textbf{Controlador:} A instituição mantenedora que define as diretrizes do negócio.
+    \item \textbf{Operador:} A empresa de hospedagem em nuvem e a processadora terceirizada de pagamentos.
+    \item \textbf{Encarregado (DPO):} Profissional designado formalmente no portal de transparência da instituição.
+\end{itemize}
+
+\subsubsection*{3. Medida Técnica Implementada em SQL}
+Para viabilizar que atendentes de suporte confirmem dados dos alunos sem expor desnecessariamente informações integrais na tela, constrói-se uma visão com mascaramento dinâmico:
+
+\begin{lstlisting}
+CREATE VIEW atendimento_seguro_aluno AS
+SELECT id_titular,
+       nome,
+       CONCAT(LEFT(email, 2), '***@', SUBSTRING_INDEX(email, '@', -1)) AS email_protegido,
+       CONCAT('***.***.', SUBSTRING(cpf, 7, 3), '-', RIGHT(cpf, 2)) AS cpf_mascarado,
+       cidade
+FROM titular;
+
+SELECT * FROM atendimento_seguro_aluno;
+\end{lstlisting}
+
+\newpage
+
+\section*{7. CONSIDERAÇÕES FINAIS DA OBRA}
+
+Ao longo deste livro técnico, percorremos a espinha dorsal da engenharia moderna de bancos de dados relacionais:
+\begin{itemize}
+    \item A \textbf{Integridade Declarativa} (Domínio e Entidade) que impede a corrupção estrutural da base;
+    \item A \textbf{Integridade Referencial e Procedural} (Chaves Estrangeiras e Gatilhos) que preserva a coerência entre relacionamentos e valida regras dinâmicas de negócio;
+    \item A \textbf{Segurança e Controle de Acesso} (DAC, MAC e RBAC) que blinda os dados contra invasões e materializa o princípio do menor privilégio;
+    \item A \textbf{Criptografia, Hash e Anonimização} que resguardam ativos críticos mesmo diante de incidentes físicos ou vazamentos acidentais;
+    \item A \textbf{Governança e Conformidade com a LGPD} que harmoniza os esquemas de dados com a legislação civil e assegura respeito integral aos direitos dos titulares.
+\end{itemize}
+
+Projetar bancos de dados íntegros, seguros e em conformidade não é um evento isolado, mas uma disciplina contínua de engenharia. Que este guia sirva de referência sólida para a sua prática profissional e acadêmica!
+
+\section*{REFERÊNCIAS DO CAPÍTULO}
+
+\noindent ANPD. AUTORIDADE NACIONAL DE PROTEÇÃO DE DADOS. \textbf{Guia Orientativo: Segurança da Informação para Agentes de Tratamento de Pequeno Porte}. Brasília: ANPD, 2021.
+
+\vspace{0.8em}
+\noindent BIONI, R. C. \textbf{Proteção de Dados Pessoais: A Função e os Limites do Consentimento}. 3. ed. Rio de Janeiro: Forense, 2021.
+
+\vspace{0.8em}
+\noindent BRASIL. \textbf{Lei nº 13.709, de 14 de agosto de 2018}. Lei Geral de Proteção de Dados Pessoais (LGPD). Diário Oficial da União: seção 1, Brasília, DF, 15 ago. 2018.
+
+\vspace{0.8em}
+\noindent BRASIL. \textbf{Emenda Constitucional nº 115, de 10 de fevereiro de 2022}. Altera a Constituição Federal para incluir a proteção de dados pessoais entre os direitos e garantias fundamentais. Diário Oficial da União: Brasília, DF, 11 fev. 2022.
+
+\vspace{0.8em}
+\noindent DONEDA, D. \textbf{Da Privacidade à Proteção de Dados Pessoais: Elementos da Formação do seu Conceito}. 2. ed. São Paulo: Thomson Reuters Brasil, 2020.
+
+\vspace{0.8em}
+\noindent PINHEIRO, P. P. \textbf{Proteção de Dados Pessoais: Comentários à Lei nº 13.709/2018 (LGPD)}. 2. ed. São Paulo: Saraiva Educação, 2020.
+
+\vspace{0.8em}
+\noindent SILBERSCHATZ, A.; KORTH, H. F.; SUDARSHAN, S. \textbf{Sistema de Banco de Dados}. 7. ed. Rio de Janeiro: GEN LTC, 2020.

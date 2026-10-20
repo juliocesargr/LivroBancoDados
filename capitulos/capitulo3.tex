@@ -1,0 +1,354 @@
+% ==============================================================================
+% CAPÍTULO 3: SEGURANÇA EM BANCO DE DADOS: CONTROLE DE ACESSO, PRIVILÉGIOS E ROLES
+% ==============================================================================
+
+\begin{center}
+\setstretch{1.0}
+\textbf{\fontsize{14}{16}\selectfont CAPÍTULO 3}
+
+\vspace{0.5em}
+
+\textbf{\fontsize{14}{16}\selectfont SEGURANÇA EM BANCO DE DADOS: CONTROLE DE ACESSO, MATRIZES DE PRIVILÉGIOS E RBAC}
+\end{center}
+
+\vspace{1.5em}
+
+\section*{1. CONTEXTUALIZAÇÃO DO TEMA E A IMPORTÂNCIA DO APRENDIZADO}
+
+Nos ecossistemas corporativos contemporâneos, o banco de dados representa o cofre digital da organização, concentrando registros financeiros, estratégias de mercado, segredos industriais e milhões de dados pessoais de clientes e cidadãos. Consequentemente, os SGBDs são o alvo prioritário de agentes maliciosos, ataques cibernéticos patrocinados e fraudes internas. Nesse cenário, o domínio formal da \textbf{Segurança em Bancos de Dados} e dos \textbf{Modelos de Controle de Acesso} transcende a mera rotina operacional: é um imperativo de sobrevivência e conformidade institucional.
+
+Estudar segurança em nível de banco de dados é indispensável porque a segurança perimetral (como firewalls de rede e criptografia de canal) não protege a organização contra ameaças originadas em credenciais comprometidas, falhas em códigos de aplicação ou acessos indevidos por colaboradores com privilégios excessivos.
+
+\subsection*{1.1. A Problemática Crítica do Controle de Acesso Inadequado}
+
+A negligência na segregação de acessos e permissões no SGBD desencadeia vulnerabilidades estruturais recorrentes no mercado de trabalho:
+\begin{itemize}
+    \item \textbf{O Vício Corporativo da Conta de Superusuário Compartilhada:} Uma das más práticas mais nocivas da indústria é conectar aplicações web, microsserviços, desenvolvedores e estagiários utilizando a mesma credencial de superusuário (\texttt{root} ou \texttt{sa}). Sob esse arranjo, qualquer falha em uma tela da aplicação concede controle irrestrito sobre todo o banco de dados, permitindo a exclusão de esquemas inteiros e a visualização de dados sigilosos.
+    \item \textbf{Ataques por Injeção de SQL (\textit{SQL Injection}):} Listado consistentemente entre os riscos mais críticos do guia internacional \textit{OWASP Top 10} (OWASP, 2021), o ataque de injeção permite que atacantes externos subvertam consultas e burlem telas de login quando entradas de usuários são concatenadas diretamente em código SQL sem parametrização.
+    \item \textbf{Violação do Princípio do Menor Privilégio:} Quando não há segregação de papéis, funcionários do setor de atendimento podem acessar salários de executivos, professores podem alterar tabelas de configuração ou alunos podem visualizar notas de terceiros. A falta de granularidade por coluna e por tabela expõe a instituição a fraudes e processos judiciais.
+    \item \textbf{Proliferação e Descontrole de Permissões:} Em ambientes que não utilizam o modelo de papéis (\textit{Role-Based Access Control} -- RBAC), permissões são concedidas individualmente a cada funcionário. Quando um colaborador muda de setor ou é desligado da empresa, suas permissões antigas permanecem ativas na base de dados por anos a fio, criando portas dos fundos desmonitoradas.
+\end{itemize}
+
+O aprendizado deste capítulo instrumentaliza o leitor a implementar o célebre \textbf{Princípio do Menor Privilégio} (\textit{Principle of Least Privilege}), assegurando que cada usuário, aplicação ou serviço receba estritamente as permissões mínimas e necessárias para desempenhar sua função funcional, e nada além disso.
+
+\newpage
+
+\section*{2. FUNDAMENTAÇÃO TEÓRICA DA SEGURANÇA EM SGBDs}
+
+Os alicerces formais da segurança computacional aplicada a sistemas de informação foram estabelecidos por Saltzer e Schroeder (1975) em seu influente trabalho sobre proteção de informações em computadores. Dentre os princípios formulados, destacam-se a economia de mecanismos, a separação de privilégios e a exigência de que o acesso padrão a qualquer recurso seja rigorosamente nulo até que uma concessão explícita seja homologada.
+
+A literatura moderna de segurança da informação (STALLINGS; BROWN, 2018; SILBERSCHATZ; KORTH; SUDARSHAN, 2020) decompõe a segurança no SGBD em duas barreiras distintas e complementares:
+\begin{enumerate}
+    \item \textbf{Autenticação:} O mecanismo pelo qual o sistema verifica a veracidade da identidade alegada por um agente externo (``Quem é você?''). Em bancos de dados relacionais, isso é realizado pela combinação de usuário, máquina/host de origem (\texttt{'usuario'@'host'}) e segredos criptográficos ou certificados.
+    \item \textbf{Autorização:} O procedimento contínuo pelo qual o motor do SGBD consulta o catálogo de privilégios para determinar se uma identidade autenticada possui o direito legítimo de executar uma instrução DDL ou DML sobre um determinado objeto (``O que você tem permissão de executar?'').
+\end{enumerate}
+
+Para estruturar a autorização, a ciência da computação desenvolveu três modelos clássicos de controle de acesso (SANDHU et al., 1996; ELMASRI; NAVATHE, 2011):
+\begin{itemize}
+    \item \textbf{DAC (\textit{Discretionary Access Control}):} Controle discricionário, onde o criador/dono do objeto decide quem recebe privilégios.
+    \item \textbf{MAC (\textit{Mandatory Access Control}):} Controle obrigatório, baseado em políticas impositivas e níveis de classificação de segurança.
+    \item \textbf{RBAC (\textit{Role-Based Access Control}):} Controle baseado em papéis organizacionais, o padrão ouro das arquiteturas corporativas modernas.
+\end{itemize}
+
+\newpage
+
+\section*{3. INJEÇÃO DE SQL (SQL INJECTION): ANATOMIA E DEFESA}
+
+O ataque de \textbf{Injeção de SQL} ocorre quando entradas textuais fornecidas por usuários são concatenadas de forma direta em instruções SQL dinâmicas sem sanitização ou parametrização, permitindo que a entrada do atacante altere a sintaxe e a lógica da consulta planejada pelo desenvolvedor (SILBERSCHATZ; KORTH; SUDARSHAN, 2020).
+
+\subsection*{3.1. Demonstração Prática da Vulnerabilidade}
+
+Considere uma relação de credenciais de usuários, na qual as senhas são armazenadas como resumo criptográfico (hash SHA-256):
+
+\begin{lstlisting}
+USE escola;
+
+CREATE TABLE usuario (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    login VARCHAR(30) UNIQUE NOT NULL,
+    senha_hash CHAR(64) NOT NULL
+);
+
+-- Insercao com hash criptografico SHA-256
+INSERT INTO usuario (login, senha_hash) VALUES
+('ana', SHA2('ana#123', 256)),
+('admin', SHA2('Adm!n#2026', 256));
+\end{lstlisting}
+
+Se a aplicação web autenticar os usuários concatenando strings da seguinte forma:
+\begin{lstlisting}
+SELECT * FROM usuario WHERE login = 'ana';
+\end{lstlisting}
+
+Um invasor pode submeter no campo de login a carga útil (\textit{payload}) clássica: \texttt{' OR '1'='1}. A consulta processada pelo motor do SGBD resultará em:
+
+\begin{lstlisting}
+SELECT * FROM usuario WHERE login = '' OR '1'='1';
+\end{lstlisting}
+Como a condição booleana \texttt{'1'='1'} é invariavelmente verdadeira (\textit{tautologia}), o SGBD retorna todas as tuplas da tabela, concedendo acesso com os privilégios do primeiro usuário listado (comumente o administrador do sistema).
+
+\subsection*{3.2. A Defesa Efetiva: Consultas Preparadas (Prepared Statements)}
+
+A única mitigação definitiva contra a injeção de SQL consiste na dissociação estrita entre o plano de compilação do código executável e os parâmetros de dados. No MySQL, isso é garantido pelo uso de \textbf{Comandos Preparados} (\textit{Prepared Statements}):
+
+\begin{lstlisting}
+-- 1. Compilacao previa da instrucao SQL com marcador de parametro '?'
+PREPARE stmt FROM 'SELECT id, login FROM usuario WHERE login = ?';
+
+-- 2. Teste do payload malicioso passado como dado puro
+SET @login_injetado = "' OR '1'='1";
+EXECUTE stmt USING @login_injetado;
+-- O motor busca literalmente um usuario cujo login seja "' OR '1'='1" e retorna zero tuplas!
+
+-- 3. Execucao legitima com parametro autentico
+SET @login_valido = 'ana';
+EXECUTE stmt USING @login_valido;
+
+-- 4. Desalocacao dos recursos no servidor
+DEALLOCATE PREPARE stmt;
+\end{lstlisting}
+
+Com a parametrização, os dados inseridos jamais são interpretados como operadores lógicos pelo analisador sintático do banco de dados.
+
+\newpage
+
+\section*{4. GESTÃO DE CONTAS E POLÍTICAS DE SENHAS NO MYSQL}
+
+No MySQL, a identidade de uma conta é composta pelo nome do usuário e pelo computador/rede de origem da conexão (\texttt{'usuario'@'host'}). Isso permite isolar conexões locais (\texttt{'localhost'}) de acessos remotos via rede corporativa (ex.: \texttt{'192.168.1.\%'}).
+
+\subsection*{4.1. Criação de Contas e Restrições de Conexão}
+
+\begin{lstlisting}
+-- Criacao de conta restrita ao host local
+CREATE USER 'joao'@'localhost' IDENTIFIED BY 'SenhaForte#2025';
+
+-- Consulta ao catalogo de sistema de usuarios
+SELECT user, host, plugin FROM mysql.user WHERE user = 'joao';
+\end{lstlisting}
+
+\subsection*{4.2. Políticas Corporativas de Senhas e Bloqueio por Força Bruta}
+
+Para atender a padrões corporativos rigorosos (como normas ISO/IEC 27001 e guias CIS Benchmark), o DBA deve impor políticas de ciclo de vida e proteção contra tentativas repetidas de invasão:
+
+\begin{lstlisting}
+-- 1. Expiracao periodica obrigatoria a cada 90 dias
+ALTER USER 'joao'@'localhost' PASSWORD EXPIRE INTERVAL 90 DAY;
+
+-- 2. Bloqueio temporario da conta apos 3 tentativas consecutivas incorretas
+ALTER USER 'joao'@'localhost'
+FAILED_LOGIN_ATTEMPTS 3
+PASSWORD_LOCK_TIME 1;
+\end{lstlisting}
+
+\subsection*{4.3. A Separação entre Autenticar e Autorizar}
+
+Quando o usuário João estabelece sua conexão:
+\begin{lstlisting}
+SELECT CURRENT_USER(); -- Retorna 'joao@localhost' (Autenticado com sucesso)
+
+-- Tentativa de consulta na tabela de alunos
+-- Retorno do motor: Error 1142 (42000): SELECT command denied to user 'joao'@'localhost' for table 'aluno'
+SELECT * FROM escola.aluno;
+\end{lstlisting}
+
+Em observância ao Princípio do Menor Privilégio, uma conta recém-criada possui privilégios estritamente nulos sobre as tabelas da aplicação até que uma concessão explícita seja homologada.
+
+\newpage
+
+\section*{5. MODELOS CLÁSSICOS DE CONTROLE DE ACESSO}
+
+\subsection*{5.1. Controle de Acesso Discricionário (DAC)}
+
+No modelo DAC (\textit{Discretionary Access Control}), o proprietário de um recurso concede ou revoga permissões aos demais usuários por meio das cláusulas \texttt{GRANT} e \texttt{REVOKE} (ELMASRI; NAVATHE, 2011).
+
+\begin{lstlisting}
+-- Concessao granular nos niveis de SELECT e INSERT para o usuario Joao
+GRANT SELECT, INSERT ON escola.aluno TO 'joao'@'localhost';
+
+-- Verificacao dos privilegios efetivos concedidos a conta
+SHOW GRANTS FOR 'joao'@'localhost';
+
+-- Revogacao pontual do privilegio de gravacao
+REVOKE INSERT ON escola.aluno FROM 'joao'@'localhost';
+\end{lstlisting}
+
+\subsubsection*{5.1.1. Granularidade por Coluna (Proteção de Campos Confidenciais)}
+
+O SGBD permite conceder acessos restritos a colunas específicas, resguardando atributos sensíveis (como CPF ou salário):
+
+\begin{lstlisting}
+CREATE USER 'maria'@'localhost' IDENTIFIED BY 'Maria#2025';
+
+-- Concedendo acesso exclusivamente a colunas operacionais
+GRANT SELECT (id_aluno, nome, email) ON escola.aluno TO 'maria'@'localhost';
+
+-- Teste conectado como 'maria':
+SELECT nome, email FROM escola.aluno; -- Operacao autorizada
+
+-- Tentativa de acessar a coluna CPF:
+-- Retorno do motor: Error 1142 (42000): SELECT command denied on column 'cpf'
+SELECT cpf FROM escola.aluno;
+\end{lstlisting}
+
+\subsubsection*{5.1.2. O Risco da Cláusula WITH GRANT OPTION}
+
+A cláusula \texttt{WITH GRANT OPTION} permite que o usuário repasse suas próprias permissões a terceiros. Esse poder deve ser monitorado com rigor extremo para evitar a proliferação desgovernada de privilégios administrativos:
+
+\begin{lstlisting}
+GRANT SELECT ON escola.aluno TO 'prof_ana'@'localhost' WITH GRANT OPTION;
+
+-- Revogacao exclusiva do poder de repasse mantendo o privilegio original
+REVOKE GRANT OPTION ON escola.aluno FROM 'prof_ana'@'localhost';
+\end{lstlisting}
+
+\subsection*{5.2. Controle de Acesso Obrigatório (MAC)}
+
+No modelo MAC (\textit{Mandatory Access Control}), os acessos são regidos por uma política central impositiva. Os dados recebem rótulos de segurança (ex.: 1 -- Público, 2 -- Confidencial, 3 -- Sigiloso) e os usuários recebem autorizações de credenciamento (\textit{clearance}) equivalentes (STALLINGS; BROWN, 2018).
+
+No MySQL Community, essa arquitetura é comumente implementada com visões (\textit{views}) que filtram dinamicamente as tuplas cruzando a identidade da sessão ativa (\texttt{USER()}) com a tabela de habilitação:
+
+\begin{lstlisting}
+CREATE TABLE documento (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    titulo VARCHAR(80) NOT NULL,
+    nivel TINYINT NOT NULL CHECK (nivel BETWEEN 1 AND 3)
+);
+
+CREATE TABLE habilitacao (
+    usuario VARCHAR(30) PRIMARY KEY,
+    nivel TINYINT NOT NULL
+);
+
+INSERT INTO documento (titulo, nivel) VALUES
+('Cardapio Escolar', 1), ('Planilha de Notas', 2), ('Ata Disciplinar Secreta', 3);
+
+INSERT INTO habilitacao VALUES ('prof_ana', 2), ('prof_bia', 1);
+
+-- Visao com filtro dinamico baseado na identidade da conexao
+CREATE VIEW documento_permitido AS
+SELECT d.id, d.titulo, d.nivel
+FROM documento d
+JOIN habilitacao h ON h.usuario = SUBSTRING_INDEX(USER(), '@', 1)
+WHERE d.nivel <= h.nivel;
+\end{lstlisting}
+
+Ao liberar privilégios exclusivamente sobre a visão \texttt{documento\_permitido}, cada usuário visualiza estritamente os documentos compatíveis com o seu nível de credenciamento.
+
+\newpage
+
+\section*{6. CONTROLE DE ACESSO BASEADO EM PAPÉIS (RBAC)}
+
+Em médias e grandes corporações, atribuir privilégios diretamente a usuários individuais é inviável e acarreta severos riscos operacionais. O modelo \textbf{RBAC} (\textit{Role-Based Access Control}) soluciona essa complexidade associando privilégios a \textbf{Papéis} (\textit{Roles}), que representam funções e cargos organizacionais. Os colaboradores recebem um ou mais papéis pertinentes ao seu perfil (SANDHU et al., 1996).
+
+\subsection*{6.1. Ciclo de Vida de Papéis no MySQL}
+
+\begin{lstlisting}
+-- 1. Criacao dos papeis institucionais
+CREATE ROLE 'r_secretaria', 'r_professor', 'r_aluno';
+
+-- 2. Concessao de privilegios direcionados aos papeis
+GRANT SELECT, INSERT, UPDATE, DELETE ON escola.aluno TO 'r_secretaria';
+GRANT SELECT ON escola.aluno TO 'r_professor';
+
+-- 3. Criacao do colaborador e atribuicao do papel
+CREATE USER 'sec_carla'@'localhost' IDENTIFIED BY 'Carla#2025';
+GRANT 'r_secretaria' TO 'sec_carla'@'localhost';
+
+-- 4. Ativacao do papel padrao ao conectar
+SET DEFAULT ROLE 'r_secretaria' TO 'sec_carla'@'localhost';
+\end{lstlisting}
+
+\subsection*{6.2. Agilidade Operacional na Transferência ou Desligamento}
+
+Caso a colaboradora mude de função organizacional, basta revogar o papel anterior sem necessidade de auditar tabelas individuais:
+
+\begin{lstlisting}
+-- Inspecao dos privilegios operantes no papel ativo
+SHOW GRANTS FOR 'sec_carla'@'localhost' USING 'r_secretaria';
+
+-- Revogacao imediata do papel: todos os privilegios sao cancelados instantaneamente
+REVOKE 'r_secretaria' FROM 'sec_carla'@'localhost';
+\end{lstlisting}
+
+\newpage
+
+\section*{7. DESAFIO PRÁTICO: MATRIZ DE SEGURANÇA ACADÊMICA}
+
+Para consolidar as competências de controle de acesso e segregação funcional, apresentamos o desafio que integra as tabelas \texttt{aluno}, \texttt{turma}, \texttt{matricula} e \texttt{nota}.
+
+\subsection*{7.1. Definição da Matriz de Privilégios Corporativa}
+
+\begin{table}[h!]
+\centering
+\small
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Papel (Role)} & \textbf{Tabela Alvo} & \textbf{Privilégios Autorizados} \\ \hline
+\texttt{r\_secretaria} & \texttt{aluno, matricula} & \texttt{SELECT, INSERT, UPDATE, DELETE} (Completo) \\ \hline
+\texttt{r\_secretaria} & \texttt{turma} & \texttt{SELECT, INSERT, UPDATE} (Sem exclusão física) \\ \hline
+\texttt{r\_professor} & \texttt{aluno} & \texttt{SELECT} (Consulta cadastral) \\ \hline
+\texttt{r\_professor} & \texttt{nota} & \texttt{SELECT, INSERT, UPDATE} (Lançamento e correção) \\ \hline
+\texttt{r\_aluno} & \texttt{nota} & \texttt{SELECT} (Consulta de rendimento) \\ \hline
+\end{tabular}
+\caption{Matriz de controle de acesso para o subsistema acadêmico.}
+\end{table}
+
+\subsection*{7.2. Implementação dos Scripts de Concessão}
+
+\begin{lstlisting}
+CREATE TABLE nota (
+    id_aluno INT,
+    id_turma INT,
+    valor DECIMAL(4,1) CHECK (valor BETWEEN 0 AND 10),
+    PRIMARY KEY (id_aluno, id_turma)
+);
+
+-- Atribuicao conforme a matriz de seguranca
+-- 1. Perfil Secretaria
+GRANT SELECT, INSERT, UPDATE, DELETE ON escola.aluno TO 'r_secretaria';
+GRANT SELECT, INSERT, UPDATE, DELETE ON escola.matricula TO 'r_secretaria';
+GRANT SELECT, INSERT, UPDATE ON escola.turma TO 'r_secretaria';
+
+-- 2. Perfil Docente
+GRANT SELECT ON escola.aluno TO 'r_professor';
+GRANT SELECT, INSERT, UPDATE ON escola.nota TO 'r_professor';
+
+-- 3. Perfil Discente
+GRANT SELECT ON escola.nota TO 'r_aluno';
+\end{lstlisting}
+
+\newpage
+
+\section*{8. SÍNTESE DO CAPÍTULO E COMPARATIVO DE MODELOS}
+
+\begin{table}[h!]
+\centering
+\small
+\begin{tabular}{|l|l|p{4.5cm}|l|}
+\hline
+\textbf{Modelo} & \textbf{Autoridade Decisória} & \textbf{Vantagem Principal} & \textbf{Comandos Típicos} \\ \hline
+\textbf{DAC} & Proprietário do Objeto & Flexibilidade de compartilhamento & \texttt{GRANT, REVOKE} \\ \hline
+\textbf{MAC} & Política Central / Rótulo & Alta segurança governamental/militar & Visões, Classificação \\ \hline
+\textbf{RBAC} & Função Organizacional & Escalabilidade e facilidade de gestão & \texttt{CREATE ROLE, GRANT} \\ \hline
+\end{tabular}
+\caption{Comparação funcional entre os modelos de controle de acesso.}
+\end{table}
+
+\section*{REFERÊNCIAS DO CAPÍTULO}
+
+\noindent ELMASRI, R.; NAVATHE, S. B. \textbf{Sistemas de Banco de Dados}. 6. ed. São Paulo: Pearson Addison Wesley, 2011.
+
+\vspace{0.8em}
+\noindent OWASP. \textbf{OWASP Top 10: 2021 - The Ten Most Critical Web Application Security Risks}. Disponível em: \url{https://owasp.org/Top10/}. Acesso em: 13 out. 2026.
+
+\vspace{0.8em}
+\noindent SALTZER, J. H.; SCHROEDER, M. D. The protection of information in computer systems. \textbf{Proceedings of the IEEE}, v. 63, n. 9, p. 1278-1308, 1975.
+
+\vspace{0.8em}
+\noindent SANDHU, R. S. et al. Role-based access control models. \textbf{IEEE Computer}, v. 29, n. 2, p. 38-47, 1996.
+
+\vspace{0.8em}
+\noindent SILBERSCHATZ, A.; KORTH, H. F.; SUDARSHAN, S. \textbf{Sistema de Banco de Dados}. 7. ed. Rio de Janeiro: GEN LTC, 2020.
+
+\vspace{0.8em}
+\noindent STALLINGS, W.; BROWN, L. \textbf{Segurança de Computadores: Princípios e Práticas}. 4. ed. Rio de Janeiro: GEN LTC, 2018.

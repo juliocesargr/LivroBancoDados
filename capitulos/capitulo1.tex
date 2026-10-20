@@ -1,0 +1,330 @@
+% ==============================================================================
+% CAPÍTULO 1: FUNDAMENTOS DE INTEGRIDADE DE DADOS: RESTRIÇÕES DE DOMÍNIO E ENTIDADE
+% ==============================================================================
+
+\begin{center}
+\setstretch{1.0}
+\textbf{\fontsize{14}{16}\selectfont CAPÍTULO 1}
+
+\vspace{0.5em}
+
+\textbf{\fontsize{14}{16}\selectfont FUNDAMENTOS DE INTEGRIDADE DE DADOS: RESTRIÇÕES DE DOMÍNIO E ENTIDADE EM SGBDs RELACIONAIS}
+\end{center}
+
+\vspace{1.5em}
+
+\section*{1. CONTEXTUALIZAÇÃO DO TEMA E A IMPORTÂNCIA DO APRENDIZADO}
+
+No cenário tecnológico contemporâneo, os dados constituem o ativo mais valioso e estratégico das organizações, fundamentando desde operações rotineiras de faturamento até complexos algoritmos de inteligência artificial e suporte à decisão executiva. Contudo, a utilidade de qualquer base de dados é diretamente proporcional à sua precisão, consistência e confiabilidade. É nesse ponto que reside a importância fundamental de estudar e dominar as \textbf{Restrições de Integridade de Dados} em Sistemas Gerenciadores de Bancos de Dados Relacionais (SGBDs).
+
+Compreender e implementar a integridade de dados é uma competência essencial para cientistas da computação, engenheiros de software e administradores de banco de dados (DBAs). A integridade não é apenas uma convenção de nomenclatura ou detalhe estético da modelagem: é o conjunto de regras matemáticas e lógicas impositivas que asseguram que o estado do banco reflita com fidelidade a realidade operacional do negócio.
+
+\subsection*{1.1. A Problemática Crítica da Ausência de Integridade no SGBD}
+
+Uma das falhas arquiteturais mais recorrentes no desenvolvimento de software consiste na crença equivocada de que as validações de dados podem ser delegadas exclusivamente às camadas externas, como o formulário no navegador do cliente (\textit{front-end}) ou as rotinas de validação de serviços (\textit{back-end}).
+
+Quando um banco de dados é projetado sem salvaguardas declarativas no próprio esquema, o ecossistema corporativo fica exposto a riscos severos:
+\begin{itemize}
+    \item \textbf{Contaminação Silenciosa da Base de Dados:} Uma falha de código na aplicação, uma atualização de versão mal sucedida ou um script de migração manual pode inserir registros completamente anômalos (como idades negativas, preços zerados ou e-mails nulos). Uma vez gravado o dado corrompido, sua detecção e saneamento demandam custos operacionais vultosos.
+    \item \textbf{Proliferação de Pontos de Falha:} Em arquiteturas distribuídas e ecossistemas de microsserviços, dezenas de aplicações heterogêneas (APIs em Python, serviços em Java, rotinas ETL e painéis de BI) acessam a mesma base de dados. Delegar a validação aos clientes exige que cada desenvolvedor reescreva as mesmas regras em cada linguagem, aumentando exponencialmente a probabilidade de divergências cadastrais.
+    \item \textbf{Invalidação de Relatórios Estratégicos e Tomada de Decisão:} Relatórios analíticos e painéis de \textit{Business Intelligence} dependem da higidez dos dados agregados. Se o banco aceita cadastros duplicados ou campos de negócio corrompidos, métricas financeiras e acadêmicas tornam-se espúrias, induzindo a liderança corporativa a decisões desastrosas.
+    \item \textbf{Descumprimento Regulatório e Vulnerabilidade Jurídica:} Em setores regulados (educação, saúde e finanças), o registro de dados incoerentes sujeita a instituição a penalidades administrativas, autuações fiscais e sanções perante órgãos fiscalizadores.
+\end{itemize}
+
+O princípio fundamental da engenharia de dados dita que o SGBD deve agir como a \textbf{última e inegociável linha de defesa} da informação corporativa. Mesmo que uma requisição chegue corrompida por qualquer motivo, o motor relacional deve rejeitá-la prontamente antes de sua consolidação em disco.
+
+\newpage
+
+\section*{2. FUNDAMENTAÇÃO TEÓRICA: O MODELO RELACIONAL E A TAXONOMIA DE INTEGRIDADE}
+
+A formulação teórica da integridade de dados remonta à criação do próprio modelo relacional por Edgar F. Codd (1970). Em seu trabalho seminal para a ACM, Codd postulou que a independência física e lógica dos dados exige que a consistência semântica seja mantida de forma impositiva pela estrutura de dados do banco, e não por procedimentos espalhados em programas de aplicação.
+
+A literatura clássica de bancos de dados (DATE, 2004; ELMASRI; NAVATHE, 2011; SILBERSCHATZ; KORTH; SUDARSHAN, 2020) classifica a integridade em quatro categorias basilares:
+\begin{enumerate}
+    \item \textbf{Integridade de Domínio:} Assegura que todo valor armazenado em um atributo pertença ao domínio de valores válidos e autorizados para aquele campo (tipo de dado primitivo, tamanho, intervalo aceitável, padrão de máscara textual e restrição contra valores nulos).
+    \item \textbf{Integridade de Entidade:} Estabelece que nenhuma relação contenha tuplas indistinguíveis. Exige formalmente a existência de uma chave primária (\textit{Primary Key}) cujos valores componentes não admitam repetição e jamais assumam estado nulo (\textit{null}).
+    \item \textbf{Integridade Referencial:} Rege as associações inter-relacionais por meio de chaves estrangeiras (\textit{Foreign Keys}), garantindo que referências cruzadas apontem invariavelmente para registros mestres existentes.
+    \item \textbf{Integridade Definida pelo Usuário:} Abrange restrições de negócio complexas da organização que exigem validações procedurais dinâmicas (frequentemente implementadas via gatilhos ou procedimentos armazenados).
+\end{enumerate}
+
+Neste capítulo, aprofundaremos as duas primeiras categorias: integridade de domínio e de entidade, confrontando esquemas desprovidos de regras com arquiteturas devidamente blindadas no MySQL 8.0+.
+
+\newpage
+
+\section*{3. O ESTUDO DE CASO PRÁTICO: O CENÁRIO SEM REGRAS}
+
+Para compreender a mecânica e a gravidade dos problemas causados pela omissão de restrições no projeto do esquema, examinaremos o comportamento de uma tabela concebida de forma deliberadamente permissiva.
+
+\begin{lstlisting}
+DROP DATABASE IF EXISTS escola;
+CREATE DATABASE escola CHARACTER SET utf8mb4;
+USE escola;
+
+-- Esquema vulneravel: ausente de chaves e restricoes de dominio
+CREATE TABLE sem_regras (
+    id INT,
+    idade INT,
+    email VARCHAR(100)
+);
+\end{lstlisting}
+
+Executamos a inserção de transações que representam falhas típicas de integração de formulários web:
+
+\begin{lstlisting}
+INSERT INTO sem_regras VALUES
+(1, -5, NULL),
+(1, 200, 'x');
+
+SELECT * FROM sem_regras;
+\end{lstlisting}
+
+\subsection*{3.1. Análise Técnica das Anomalias Geradas}
+\begin{itemize}
+    \item \textbf{Ambiguidade de Entidade:} O código identificador \texttt{id = 1} foi registrado duas vezes. É impossível determinar matematicamente qual linha corresponde a qual aluno no mundo real.
+    \item \textbf{Incoerência de Domínio Numérico:} O atributo \texttt{idade} aceitou simultaneamente o valor negativo ($-5$), biologicamente impossível, e o valor $200$, que extrapola o limite fisiológico humano.
+    \item \textbf{Ausência e Degradação de Formato:} O atributo \texttt{email} aceitou a ausência total de conteúdo (\texttt{NULL}) e uma cadeia monossilábica (\texttt{'x'}), que quebra rotinas automáticas de despacho de mensagens.
+\end{itemize}
+
+O banco comportou-se como mero gravador passivo de bytes. É exatamente para sanar essa vulnerabilidade estrutural que aplicamos a integridade de domínio.
+
+\newpage
+
+\section*{4. RESTRIÇÕES DE INTEGRIDADE DE DOMÍNIO EM SQL}
+
+As restrições de domínio delimitam o espaço de estados válidos de uma coluna por meio das cláusulas \texttt{CHECK}, \texttt{NOT NULL} e \texttt{DEFAULT} (MELTON; SIMON, 2002).
+
+\subsection*{4.1. Requisitos Técnicos no MySQL: O Suporte Efetivo ao CHECK}
+
+É imperativo destacar uma particularidade técnica do SGBD MySQL: até a versão 8.0.15, o analisador sintático reconhecia a palavra reservada \texttt{CHECK}, mas não aplicava a validação durante as operações de escrita. O suporte formal e executável à cláusula \texttt{CHECK} foi introduzido a partir da versão **MySQL 8.0.16** (ORACLE, 2024).
+
+A confirmação da versão operacional é verificada por:
+\begin{lstlisting}
+SELECT VERSION();
+\end{lstlisting}
+
+\subsection*{4.2. Implementação das Quatro Salvaguardas de Domínio}
+
+Refatoramos a relação cadastral aplicando um conjunto coordenado de restrições:
+\begin{enumerate}
+    \item \textbf{Intervalo Numérico com \texttt{CHECK}:} Impõe que a idade pertença obrigatoriamente à faixa etária escolar entre 14 e 99 anos (\texttt{idade BETWEEN 14 AND 99}).
+    \item \textbf{Obrigatoriedade com \texttt{NOT NULL}:} Veda a criação de tuplas sem endereço de e-mail.
+    \item \textbf{Carga Padrão com \texttt{DEFAULT}:} Preenche automaticamente o estado cadastral como \texttt{'ATIVO'} quando o parâmetro não for informado na instrução DML.
+    \item \textbf{Máscara Estrutural com \texttt{LIKE}:} Restringe a matrícula acadêmica para que se inicie compulsoriamente com o padrão do curso (\texttt{'BD2\%'}).
+\end{enumerate}
+
+\begin{lstlisting}
+CREATE TABLE aluno (
+    idade INT CHECK (idade BETWEEN 14 AND 99),
+    email VARCHAR(100) NOT NULL,
+    status VARCHAR(10) DEFAULT 'ATIVO',
+    matricula CHAR(10) CHECK (matricula LIKE 'BD2%')
+);
+\end{lstlisting}
+
+\subsection*{4.3. Testes Práticos e Análise de Falhas Provocadas}
+
+A validação em laboratório é realizada executando transações válidas e forçando os limites do motor com desvios intencionais:
+
+\begin{lstlisting}
+-- CASO 1: Registro em plena conformidade com as restricoes
+INSERT INTO aluno (idade, email, matricula)
+VALUES (17, 'ana@escola.com', 'BD2-001');
+
+-- CASO 2: Violacao de intervalo de idade (idade = 200)
+-- Retorno do motor: Error 3819 (HY000): Check constraint 'aluno_chk_1' is violated.
+INSERT INTO aluno (idade, email, matricula)
+VALUES (200, 'x@x.com', 'BD2-002');
+
+-- CASO 3: Violacao de obrigatoriedade (e-mail nulo)
+-- Retorno do motor: Error 1048 (23000): Column 'email' cannot be null.
+INSERT INTO aluno (idade, email, matricula)
+VALUES (17, NULL, 'BD2-003');
+
+-- CASO 4: Violacao de padrao textual (matricula com prefixo incorreto)
+-- Retorno do motor: Error 3819 (HY000): Check constraint 'aluno_chk_2' is violated.
+INSERT INTO aluno (idade, email, matricula)
+VALUES (17, 'y@y.com', 'XYZ-004');
+\end{lstlisting}
+
+Ao inspecionar o estado resultante:
+\begin{lstlisting}
+SELECT * FROM aluno;
+\end{lstlisting}
+Constata-se que apenas a tupla da aluna Ana foi gravada. O SGBD interceptou e abortou cada tentativa anômala, blindando o repositório contra dados corrompidos.
+
+\subsection*{4.4. Evolução do Esquema com ALTER TABLE}
+
+Em sistemas corporativos em produção, a introdução de novas regras em tabelas pré-existentes é realizada com o comando \texttt{ALTER TABLE ... ADD CONSTRAINT}:
+
+\begin{lstlisting}
+-- Adicao de verificacao sintatica basica do caractere '@' no e-mail
+ALTER TABLE aluno ADD CONSTRAINT chk_email
+CHECK (email LIKE '%@%');
+
+-- Teste de violacao da regra recem-criada
+-- Retorno esperado: Error 3819 referente a 'chk_email'
+INSERT INTO aluno (idade, email, matricula)
+VALUES (17, 'semarroba', 'BD2-005');
+
+DROP TABLE aluno;
+\end{lstlisting}
+
+\newpage
+
+\section*{5. RESTRIÇÕES DE INTEGRIDADE DE ENTIDADE}
+
+A integridade de entidade declara que cada elemento registrado na relação deve possuir uma identidade individualizada e imutável. No modelo relacional, essa imposição é cumprida pela definição da \textbf{Chave Primária} (\textit{Primary Key} -- PK), acompanhada de restrições de unicidade (\texttt{UNIQUE}) para chaves naturais de negócio (DATE, 2004).
+
+\subsection*{5.1. Chaves Substitutas (Surrogate Keys) versus Chaves Naturais}
+
+A melhor prática de arquitetura em bancos de dados corporativos preconiza o desacoplamento entre a chave física do registro e os atributos identificadores do negócio:
+\begin{itemize}
+    \item \textbf{Chave Substituta (\textit{Surrogate Key}):} Um identificador numérico autoincrementado (\texttt{AUTO\_INCREMENT}), controlado estritamente pelo motor do banco, desprovido de significado semântico e imutável ao longo do ciclo de vida da tupla.
+    \item \textbf{Chave Natural Protegida:} Um documento de identificação civil (como o CPF), protegido pela cláusula \texttt{UNIQUE NOT NULL}. Essa dissociação impede que correções cadastrais na chave natural afetem tabelas dependentes ligadas por chaves estrangeiras.
+\end{itemize}
+
+\begin{lstlisting}
+CREATE TABLE aluno (
+    id_aluno INT PRIMARY KEY AUTO_INCREMENT,
+    cpf CHAR(11) UNIQUE NOT NULL,
+    nome VARCHAR(80) NOT NULL,
+    idade INT CHECK (idade BETWEEN 14 AND 99),
+    email VARCHAR(100) NOT NULL,
+    status VARCHAR(10) DEFAULT 'ATIVO'
+);
+\end{lstlisting}
+
+\subsection*{5.2. Testando a Barreira de Unicidade (UNIQUE)}
+
+Inserimos duas alunas distintas e forçamos a inserção de uma terceira tupla duplicando o CPF da primeira:
+
+\begin{lstlisting}
+INSERT INTO aluno (cpf, nome, idade, email) VALUES
+('11111111111', 'Ana', 16, 'a@e.com'),
+('22222222222', 'Bia', 17, 'b@e.com');
+
+-- Tentativa de clonagem/duplicacao de CPF
+-- Retorno: Error 1062 (23000): Duplicate entry '11111111111' for key 'aluno.cpf'
+INSERT INTO aluno (cpf, nome, idade, email) VALUES
+('11111111111', 'Caio', 18, 'c@e.com');
+\end{lstlisting}
+
+Da mesma forma, uma tentativa de sobregravar manualmente uma chave primária existente é sumariamente repelida:
+\begin{lstlisting}
+-- Tentativa de sobrescrever o id_aluno 1 ja existente
+-- Retorno: Error 1062 (23000): Duplicate entry '1' for key 'aluno.PRIMARY'
+INSERT INTO aluno (id_aluno, cpf, nome, idade, email)
+VALUES (1, '33333333333', 'Caio', 18, 'c@e.com');
+\end{lstlisting}
+
+\subsection*{5.3. Chaves Primárias Compostas}
+
+Em relações associativas que conectam entidades distintas em cardinalidade muitos-para-muitos ($N:M$), a chave primária é formada pela tupla combinada das chaves de associação:
+
+\begin{lstlisting}
+CREATE TABLE turma (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    nome VARCHAR(50) NOT NULL
+);
+
+-- Tabela associativa com Chave Primaria Composta
+CREATE TABLE matricula (
+    id_aluno INT,
+    id_turma INT,
+    PRIMARY KEY (id_aluno, id_turma)
+);
+
+INSERT INTO turma (nome) VALUES ('Info 2A'), ('Info 2B');
+
+-- Insercoes validas
+INSERT INTO matricula VALUES (1, 1), (2, 1);
+
+-- Mesmo aluno em turma diferente: OPERACAO PERMITIDA
+INSERT INTO matricula VALUES (1, 2);
+
+-- Tentativa de duplicar o mesmo aluno na mesma turma: BLOQUEIO IMEDIATO
+-- Retorno: Error 1062: Duplicate entry '1-1' for key 'matricula.PRIMARY'
+INSERT INTO matricula VALUES (1, 1);
+\end{lstlisting}
+
+\newpage
+
+\section*{6. LABORATÓRIO PRÁTICO ORIENTADO}
+
+\subsection*{6.1. Exercício 1: Modelagem e Restrições na Tabela Produto}
+
+\textbf{Problemática do Caso:} O departamento de estoque de uma instituição comercial necessita de uma tabela para cadastramento de produtos. Caso preços negativos ou nomes vazios sejam aceitos, sistemas de frente de caixa travam ou computam perdas financeiras. Projete a tabela aplicando chave primária autoincrementada, nome obrigatório, preço obrigatoriamente superior a zero e estoque com valor padrão zero.
+
+\begin{lstlisting}
+CREATE TABLE produto (
+    id_produto INT PRIMARY KEY AUTO_INCREMENT,
+    nome VARCHAR(80) NOT NULL,
+    preco DECIMAL(10,2) CHECK (preco > 0),
+    estoque INT DEFAULT 0
+);
+
+-- Insercao valida
+INSERT INTO produto (nome, preco) VALUES ('Apostila de Banco de Dados', 45.00);
+
+-- Erro provocado 1: Preco zero violando o CHECK (Erro 3819)
+INSERT INTO produto (nome, preco) VALUES ('Caneta', 0.00);
+
+-- Erro provocado 2: Nome ausente violando o NOT NULL (Erro 1048)
+INSERT INTO produto (nome, preco) VALUES (NULL, 19.90);
+\end{lstlisting}
+
+\subsection*{6.2. Exercício 2: Regra de Negócio Salarial}
+
+\textbf{Problemática do Caso:} No cadastro funcional corporativo, o departamento jurídico exige conformidade estrita com o piso salarial nacional estabelecido em R\$ 1.518,00. Qualquer inserção abaixo desse limite representa risco de passivo trabalhista e deve ser impedida pelo SGBD.
+
+\begin{lstlisting}
+CREATE TABLE funcionario (
+    id_func INT PRIMARY KEY AUTO_INCREMENT,
+    nome VARCHAR(80) NOT NULL,
+    salario DECIMAL(10,2) CHECK (salario >= 1518.00)
+);
+
+-- Transacao homologada
+INSERT INTO funcionario (nome, salario) VALUES ('Carla Mendes', 2800.00);
+
+-- Rejeicao imperativa pelo SGBD (abaixo do piso: Erro 3819)
+INSERT INTO funcionario (nome, salario) VALUES ('Davi Alcantara', 1100.00);
+\end{lstlisting}
+
+\newpage
+
+\section*{7. SÍNTESE DO CAPÍTULO E QUADRO COMPARATIVO}
+
+\begin{table}[h!]
+\centering
+\small
+\begin{tabular}{|l|l|p{5.5cm}|l|}
+\hline
+\textbf{Categoria} & \textbf{Cláusula} & \textbf{Finalidade Arquitetural} & \textbf{Código de Erro} \\ \hline
+Domínio & \texttt{CHECK} & Validação de limites numéricos ou padrões textuais & Erro 3819 \\ \hline
+Domínio & \texttt{NOT NULL} & Obrigatoriedade compulsória de preenchimento & Erro 1048 \\ \hline
+Domínio & \texttt{DEFAULT} & Carga de valor padrão na ausência de input & -- \\ \hline
+Entidade & \texttt{PRIMARY KEY} & Identificação única, absoluta e imutável da tupla & Erro 1062 \\ \hline
+Entidade & \texttt{UNIQUE} & Garantia de unicidade para chaves naturais de negócio & Erro 1062 \\ \hline
+\end{tabular}
+\caption{Mecanismos de integridade de domínio e entidade no MySQL.}
+\end{table}
+
+\section*{REFERÊNCIAS DO CAPÍTULO}
+
+\noindent CODD, E. F. A relational model of data for large shared data banks. \textbf{Communications of the ACM}, v. 13, n. 6, p. 377-387, 1970.
+
+\vspace{0.8em}
+\noindent DATE, C. J. \textbf{Introdução a Sistemas de Bancos de Dados}. 8. ed. Rio de Janeiro: Elsevier, 2004.
+
+\vspace{0.8em}
+\noindent ELMASRI, R.; NAVATHE, S. B. \textbf{Sistemas de Banco de Dados}. 6. ed. São Paulo: Pearson Addison Wesley, 2011.
+
+\vspace{0.8em}
+\noindent MELTON, J.; SIMON, A. R. \textbf{SQL: 1999 - Understanding Relational Language Components}. San Francisco: Morgan Kaufmann, 2002.
+
+\vspace{0.8em}
+\noindent ORACLE. \textbf{MySQL 8.0 Reference Manual: Constraints and DDL}. Redwood City: Oracle Corporation, 2024. Disponível em: \url{https://dev.mysql.com/doc/refman/8.0/en/}. Acesso em: 13 out. 2026.
+
+\vspace{0.8em}
+\noindent SILBERSCHATZ, A.; KORTH, H. F.; SUDARSHAN, S. \textbf{Sistema de Banco de Dados}. 7. ed. Rio de Janeiro: GEN LTC, 2020.

@@ -1,0 +1,261 @@
+% ==============================================================================
+% CAPÍTULO 2: IMPLEMENTAÇÃO PRÁTICA DOS CLIENTES IOT E DO BACKEND DE IRRIGAÇÃO
+% ==============================================================================
+
+\begin{center}
+\setstretch{1.0}
+\textbf{\fontsize{14}{16}\selectfont CAPÍTULO 2}
+
+\vspace{0.5em}
+
+\textbf{\fontsize{14}{16}\selectfont IMPLEMENTAÇÃO PRÁTICA DOS CLIENTES IOT E DO BACKEND DE IRRIGAÇÃO}
+\end{center}
+
+\vspace{1.5em}
+
+\section*{1. INTRODUÇÃO À IMPLEMENTAÇÃO DE CLIENTES E BACKEND EM IRRIGAÇÃO IOT}
+
+A consolidação de um sistema automatizado de irrigação depende da tradução prática das especificações teóricas do protocolo HTTP em código-fonte executável e funcional. Enquanto o Capítulo 1 estabeleceu a semântica das requisições, respostas, verbos e códigos de status HTTP, este capítulo dedica-se exclusivamente à construção da camada de implementação dos múltiplos clientes e do servidor central backend.
+
+No ecossistema de automação agrícola proposto, a heterogeneidade de dispositivos exige abordagens de programação distintas para cada perfil de cliente. Os nós embarcados de campo operam sob restrições de hardware e memória RAM, demandando código em linguagem C++ otimizado para os microcontroladores ESP32 e Arduino. No ambiente do escritório ou central de monitoramento, o painel de controle exige reatividade gráfica orientada a eventos em TypeScript com o framework Angular. Por fim, o servidor backend necessita de uma estrutura robusta em Python Flask integrada ao banco de dados relacional MySQL para gerenciar a persistência e a tomada de decisão em tempo real.
+
+Nas seções a seguir, são apresentadas e explicadas as implementações completas dos clientes de hardware embarcado, da aplicação web frontend e da API do backend de irrigação (\texttt{backend-irriga}).
+
+\newpage
+
+\section*{2. IMPLEMENTAÇÃO DOS CLIENTES EMBARCADOS (EDGE HARDWARE)}
+
+Os dispositivos de campo são responsáveis por realizar a interface direta com o mundo físico, acionando relés elétricos que operam a bomba de água principal e as válvulas solenoides dos setores de cultivo.
+
+\subsection*{2.1. Código C++ para ESP32: Sincronização via HTTPClient}
+
+O microcontrolador ESP32 executa um firmware em C++ que estabelece a conexão Wi-Fi com a rede local da fazenda e efetua requisições periódicas do tipo \texttt{GET /estado-geral} para o servidor Flask. O código analisa a resposta JSON recebida, extrai o estado booleano do atributo \texttt{bomba} e altera o nível lógico do pino digital conectado ao módulo relé.
+
+\begin{lstlisting}[language=C++]
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
+
+const char* ssid = "Rede_Fazenda_IoT";
+const char* password = "Senha@Irrigacao2026";
+const char* serverUrl = "http://192.168.1.100:5000/estado-geral";
+
+const int PIN_RELE_BOMBA = 26;
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(PIN_RELE_BOMBA, OUTPUT);
+  digitalWrite(PIN_RELE_BOMBA, LOW);
+
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWi-Fi Conectado!");
+}
+
+void loop() {
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    http.begin(serverUrl);
+    http.addHeader("Accept", "application/json");
+
+    int httpCode = http.GET();
+
+    if (httpCode == HTTP_CODE_OK) {
+      String payload = http.getString();
+      StaticJsonDocument<512> doc;
+      DeserializationError error = deserializeJson(doc, payload);
+
+      if (!error) {
+        bool bombaAtiva = doc["bomba"];
+        digitalWrite(PIN_RELE_BOMBA, bombaAtiva ? HIGH : LOW);
+        Serial.printf("Estado da Bomba Atualizado: %s\n", bombaAtiva ? "LIGADA" : "DESLIGADA");
+      }
+    } else {
+      Serial.printf("Erro na Requisicao HTTP: %d\n", httpCode);
+    }
+    http.end();
+  }
+  delay(5000);
+}
+\end{lstlisting}
+
+A análise técnica do código demonstra a eficiência da biblioteca \texttt{HTTPClient}, que abstrai a abertura e o fechamento do socket TCP, permitindo que a decodificação da estrutura JSON ocorra via memória estática alocada pela biblioteca \texttt{ArduinoJson}.
+
+\newpage
+
+\subsection*{2.2. Código C++ para Arduino UNO com Ethernet Shield W5100}
+
+Em cenários rurais onde a infraestrutura sem fio sofre com interferências eletromagnéticas de motores elétricos, utiliza-se a plataforma Arduino UNO acoplada a um módulo Ethernet cabeado W5100. Devido às limitações extremas de memória RAM do microcontrolador ATmega328P (2 KB de RAM), a requisição é transmitida via socket TCP bruto através do objeto \texttt{EthernetClient}.
+
+\begin{lstlisting}[language=C++]
+#include <SPI.h>
+#include <Ethernet.h>
+
+byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
+IPAddress server(192, 168, 1, 100);
+int port = 5000;
+
+EthernetClient client;
+
+void setup() {
+  Serial.begin(9600);
+  if (Ethernet.begin(mac) == 0) {
+    Serial.println("Falha ao configurar Ethernet via DHCP");
+    for (;;);
+  }
+  delay(1000);
+}
+
+void loop() {
+  Serial.println("Conectando ao Servidor de Irrigacao...");
+
+  if (client.connect(server, port)) {
+    // Construcao manual da requisicao HTTP GET RAW
+    client.println("GET /bomba HTTP/1.1");
+    client.println("Host: 192.168.1.100");
+    client.println("User-Agent: ArduinoEthernet/1.0");
+    client.println("Connection: close");
+    client.println(); // Linha em branco obrigatoria
+
+    // Aguarda e le a resposta do servidor
+    while (client.connected() || client.available()) {
+      if (client.available()) {
+        char c = client.read();
+        Serial.print(c);
+      }
+    }
+    client.stop();
+    Serial.println("\nConexao encerrada.");
+  } else {
+    Serial.println("Falha na conexao TCP com o servidor.");
+  }
+  delay(10000);
+}
+\end{lstlisting}
+
+Nessa implementação de baixo nível, a transmissão manual das linhas de cabeçalho e da linha em branco de término (\texttt{CRLF}) evidencia o funcionamento bruto do protocolo HTTP/1.1 conforme especificado na RFC 9112 (FIELDING; NOTTINGHAM; RESCHKE, 2022b).
+
+\newpage
+
+\section*{3. IMPLEMENTAÇÃO DO CLIENTE WEB ANGULAR}
+
+O painel de controle web permite ao agricultor visualizar graficamente o estado do sistema, cadastrar novas rotinas de irrigação e acionar manualmente válvulas solenoides. A aplicação é estruturada como uma Single Page Application (SPA) em Angular.
+
+\subsection*{3.1. Serviço HTTP Reativo em TypeScript}
+
+O serviço \texttt{IrrigacaoService} encapsula as chamadas à API REST do backend. Utilizando o módulo \texttt{HttpClient} do Angular, o serviço retorna objetos assíncronos do tipo \texttt{Observable} gerenciados pela biblioteca RxJS.
+
+\begin{lstlisting}
+import { Injectable } from '@angular/core';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { Observable } from 'rxjs';
+
+export interface Agendamento {
+  id?: number;
+  data_agendamento: string;
+  hora_inicio: string;
+  hora_fim: string;
+  duracao_minutos: number;
+  solenoide: string;
+  usuario: string;
+  status: string;
+}
+
+@Injectable({
+  providedIn: 'root'
+})
+export class IrrigacaoService {
+  private apiUrl = 'http://192.168.1.100:5000';
+
+  constructor(private http: HttpClient) {}
+
+  // Obtem o estado unificado do sistema
+  getEstadoGeral(): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/estado-geral`);
+  }
+
+  // Aciona bomba ou solenoide
+  setSolenoide(id: number, ativo: boolean): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/solenoide?id=${id}&ativo=${ativo}`, {});
+  }
+
+  // Cadastra um novo agendamento de irrigacao
+  criarAgendamento(agendamento: Agendamento): Observable<Agendamento> {
+    const headers = new HttpHeaders({ 'Content-Type': 'application/json' });
+    return this.http.post<Agendamento>(`${this.apiUrl}/agendamentos`, agendamento, { headers });
+  }
+}
+\end{lstlisting}
+
+A interface \texttt{Agendamento} define a tipagem estrita do modelo de dados, garantindo que requisições enviadas ao backend atendam aos requisitos de validação do contrato da API.
+
+\newpage
+
+\section*{4. IMPLEMENTAÇÃO DO BACKEND EM PYTHON FLASK (\texttt{backend-irriga})}
+
+O servidor central backend é desenvolvido na linguagem Python com o micro-framework Flask e o ORM SQLAlchemy para integração com o banco de dados MySQL.
+
+\subsection*{4.1. Lógica de Sincronização e Rotas REST API}
+
+O módulo \texttt{bomba\_routes.py} implementa o roteamento das requisições HTTP e executa a função de sincronização automática entre a tabela de agendamentos e a tabela do atuador da bomba de água.
+
+\begin{lstlisting}[language=Python]
+from flask import Blueprint, jsonify, request
+from sqlalchemy import text
+from db import db
+
+bomba_routes = Blueprint('bomba_routes', __name__)
+
+def sincronizar_status():
+    # 1. Verifica agendamentos ativos na data e horario atuais
+    sql_check = """
+    SELECT COUNT(*) FROM agendamentos 
+    WHERE data_agendamento = CURDATE() 
+      AND CURTIME() BETWEEN hora_inicio AND hora_fim
+    """
+    agendamentos_ativos = db.session.execute(text(sql_check)).scalar() or 0
+    deve_ligar_bomba = agendamentos_ativos > 0
+
+    # 2. Atualiza o status da bomba principal no banco de dados
+    db.session.execute(
+        text("UPDATE bomba SET ativo = :ativo WHERE id = 1"),
+        {"ativo": 1 if deve_ligar_bomba else 0}
+    )
+    db.session.commit()
+
+@bomba_routes.route('/estado-geral', methods=['GET'])
+def estado_geral():
+    try:
+        sincronizar_status()
+        solenoides = db.session.execute(text("SELECT id, ativo FROM solenoides")).fetchall()
+        bomba = db.session.execute(text("SELECT ativo FROM bomba WHERE id = 1")).scalar()
+
+        return jsonify({
+            "bomba": bool(bomba),
+            "solenoides": [{"id": s[0], "ativo": bool(s[1])} for s in solenoides]
+        }), 200
+    except Exception as e:
+        return jsonify({"error": f"Erro interno: {str(e)}"}), 500
+\end{lstlisting}
+
+A função \texttt{sincronizar\_status()} avalia se a hora atual do servidor encontra-se compreendida dentro de algum intervalo de irrigação agendado no banco relacional. Caso existam registros ativos, o status da bomba é atualizado para 1 (\texttt{true}), assegurando que os nós embarcados recebam a instrução de acionamento durante a consulta periódica ao endpoint \texttt{/estado-geral}.
+
+\vspace{1.5em}
+
+\section*{REFERÊNCIAS}
+
+\begin{singlespace}
+\noindent FIELDING, Roy T.; NOTTINGHAM, Mark; RESCHKE, Julian. \textbf{HTTP Semantics}. RFC 9110, Internet Engineering Task Force (IETF), jun. 2022. Disponível em: <https://www.rfc-editor.org/rfc/rfc9110>. Acesso em: 28 set. 2026.
+
+\vspace{0.8em}
+\noindent FIELDING, Roy T.; NOTTINGHAM, Mark; RESCHKE, Julian. \textbf{HTTP/1.1}. RFC 9112, Internet Engineering Task Force (IETF), jun. 2022. Disponível em: <https://www.rfc-editor.org/rfc/rfc9112>. Acesso em: 28 set. 2026.
+
+\vspace{0.8em}
+\noindent KRUGER, C. P. \textbf{Automação Agrícola e Internet das Coisas}: Aplicação de Sensores e Microcontroladores no Campo. São Paulo: Editora Técnica, 2024.
+
+\vspace{0.8em}
+\noindent SANTOS, T. R.; SILVA, M. A. \textbf{Sistemas de Irrigação Inteligentes baseados em ESP32 e Protocolos Web}. Revista Brasileira de Engenharia Agrícola e Ambiental, v. 28, n. 4, p. 210-225, 2025.
+\end{singlespace}
