@@ -234,6 +234,101 @@ WHERE d.nivel <= h.nivel;
 
 Ao liberar privilégios exclusivamente sobre a visão \texttt{documento\_permitido}, cada usuário visualiza estritamente os documentos compatíveis com o seu nível de credenciamento.
 
+\subsection*{5.2.1. Modelagem Diagramática da Consulta com Junção Dinâmica (MAC)}
+
+A execução da visão \texttt{documento\_permitido} realiza uma junção interna condicional entre a tabela de recursos \texttt{documento} e a tabela de credenciais \texttt{habilitacao}. A Figura \ref{fig:mac_join_view} modela em TikZ como a identidade ativa (\texttt{USER()}) é capturada, vinculada à sua autorização formal e utilizada para filtrar tuplas de acordo com a política multinível.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=1.0cm and 1.8cm,
+    every node/.style={font=\small},
+    tablebox/.style={
+        draw=editorablue!80!black,
+        rounded corners=4pt,
+        line width=0.9pt,
+        fill=blue!3,
+        inner sep=4pt
+    },
+    userbox/.style={
+        draw=orange!80!black,
+        rounded corners=4pt,
+        line width=0.9pt,
+        fill=orange!6,
+        inner sep=5pt,
+        font=\footnotesize,
+        align=center
+    },
+    querybox/.style={
+        draw=green!60!black,
+        rounded corners=4pt,
+        line width=0.8pt,
+        fill=green!4,
+        inner sep=5pt,
+        font=\footnotesize
+    },
+    flowarrow/.style={
+        -{Stealth[length=2.5mm, width=1.8mm]},
+        line width=1.1pt,
+        draw=editorablue!90!black
+    }
+]
+
+% Tabela: DOCUMENTO
+\node[tablebox] (doc) {
+    \begin{tabular}{ll}
+    \multicolumn{2}{c}{\textbf{\color{editorablue!90!black}documento} \ \footnotesize(Recursos)} \\
+    \hline
+    \textbf{\color{editorablue!90!black}PK} & \underline{\texttt{id}} : \texttt{INT} \\
+    & \texttt{titulo} : \texttt{VARCHAR(80)} \\
+    & \texttt{nivel} : \texttt{TINYINT} \ (1..3) \\
+    \end{tabular}
+};
+
+% Tabela: HABILITACAO
+\node[tablebox, right=2.0cm of doc] (hab) {
+    \begin{tabular}{ll}
+    \multicolumn{2}{c}{\textbf{\color{editorablue!90!black}habilitacao} \ \footnotesize(Credenciais)} \\
+    \hline
+    \textbf{\color{editorablue!90!black}PK} & \underline{\texttt{usuario}} : \texttt{VARCHAR(30)} \\
+    & \texttt{nivel} : \texttt{TINYINT} \ (1..3) \\
+    \end{tabular}
+};
+
+% Bloco do Usuario Ativo
+\node[userbox, above=0.7cm of hab] (sessao) {
+    \textbf{\color{orange!80!black}Sessão Ativa: \texttt{USER()}}\\[0.1em]
+    \texttt{'prof\_ana@localhost'} $\to$ \texttt{'prof\_ana'}
+};
+
+% Seta ligando sessao a habilitacao
+\draw[-{Stealth[length=2.2mm]}, line width=1pt, draw=orange!80!black] 
+    (sessao.south) -- (hab.north)
+    node[midway, right, font=\tiny] {\texttt{SUBSTRING\_INDEX(...)}};
+
+% Seta de Juncao entre Habilitacao e Documento
+\draw[flowarrow] (hab.west) -- (doc.east)
+    node[midway, above, font=\scriptsize\bfseries, color=editorablue!90!black] {\texttt{JOIN} Dinâmico}
+    node[midway, below, font=\tiny, color=red!70!black] {\texttt{WHERE d.nivel <= h.nivel}};
+
+% Bloco da Visao Resultante
+\node[querybox, below=1.1cm of $(doc.south)!0.5!(hab.south)$, text width=11.5cm] (view_result) {
+    \textbf{\color{green!50!black}Visão de Acesso Multinível (\texttt{documento\_permitido}):}\\[0.2em]
+    \texttt{\textbf{SELECT} d.id, d.titulo, d.nivel \textbf{FROM} documento d}\\
+    \texttt{\textbf{JOIN} habilitacao h \textbf{ON} h.usuario = SUBSTRING\_INDEX(USER(), '@', 1)}\\
+    \texttt{\textbf{WHERE} d.nivel <= h.nivel;}
+};
+
+\draw[-{Stealth[length=2mm]}, dashed, color=gray!60, line width=0.8pt] 
+    (doc.south) -- ++(0,-0.4) -| ($(view_result.north west)!0.28!(view_result.north east)$);
+\draw[-{Stealth[length=2mm]}, dashed, color=gray!60, line width=0.8pt] 
+    (hab.south) -- ++(0,-0.4) -| ($(view_result.north west)!0.72!(view_result.north east)$);
+
+\end{tikzpicture}
+\caption{Modelagem em TikZ da consulta com junção dinâmica e filtro de segurança (MAC).}
+\label{fig:mac_join_view}
+\end{figure}
+
 \newpage
 
 \section*{6. CONTROLE DE ACESSO BASEADO EM PAPÉIS (RBAC)}
@@ -316,6 +411,120 @@ GRANT SELECT, INSERT, UPDATE ON escola.nota TO 'r_professor';
 -- 3. Perfil Discente
 GRANT SELECT ON escola.nota TO 'r_aluno';
 \end{lstlisting}
+
+\subsection*{7.3. Consulta Consolidada e Modelagem Relacional RBAC em TikZ}
+
+A emissão de boletins e históricos escolares requer consultas integradas que percorrem as quatro tabelas do subsistema acadêmico através de suas chaves estrangeiras. A instrução a seguir consolida os alunos matriculados, suas respectivas turmas e as notas obtidas:
+
+\begin{lstlisting}
+-- Consulta consolidando o boletim academico com juncao multipla
+SELECT a.nome AS aluno,
+       t.nome AS turma,
+       n.valor AS nota
+FROM matricula m
+INNER JOIN aluno a ON m.id_aluno = a.id_aluno
+INNER JOIN turma t ON m.id_turma = t.id_turma
+LEFT JOIN nota n ON (n.id_aluno = a.id_aluno AND n.id_turma = t.id_turma);
+\end{lstlisting}
+
+A Figura \ref{fig:rbac_academic_schema} detalha a modelagem relacional completa em TikZ, ilustrando as referências de chave estrangeira que viabilizam a junção e o mapeamento dos perímetros de autorização dos três papéis (\textit{roles}) institucionais.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    every node/.style={font=\small},
+    tablebox/.style={
+        draw=editorablue!80!black,
+        rounded corners=4pt,
+        line width=0.9pt,
+        fill=blue!3,
+        inner sep=4pt
+    },
+    querybox/.style={
+        draw=green!60!black,
+        rounded corners=4pt,
+        line width=0.8pt,
+        fill=green!4,
+        inner sep=5pt,
+        font=\footnotesize
+    },
+    fkarrow/.style={
+        -{Stealth[length=2.3mm, width=1.6mm]},
+        line width=1.0pt,
+        draw=editorablue!90!black
+    }
+]
+
+% Entidade Central 1: MATRICULA
+\node[tablebox] (matricula) {
+    \begin{tabular}{ll}
+    \multicolumn{2}{c}{\textbf{\color{editorablue!90!black}matricula} \ \footnotesize(Associação N:M)} \\
+    \hline
+    \textbf{\color{red!70!black}PK,FK} & \underline{\textbf{\texttt{id\_aluno}}} : \texttt{INT} \\
+    \textbf{\color{red!70!black}PK,FK} & \underline{\textbf{\texttt{id\_turma}}} : \texttt{INT} \\
+    \end{tabular}
+};
+
+% Entidade Central 2: NOTA
+\node[tablebox, below=0.9cm of matricula] (nota) {
+    \begin{tabular}{ll}
+    \multicolumn{2}{c}{\textbf{\color{editorablue!90!black}nota} \ \footnotesize(Avaliação)} \\
+    \hline
+    \textbf{\color{red!70!black}PK,FK} & \underline{\textbf{\texttt{id\_aluno}}} : \texttt{INT} \\
+    \textbf{\color{red!70!black}PK,FK} & \underline{\textbf{\texttt{id\_turma}}} : \texttt{INT} \\
+    & \texttt{valor} : \texttt{DECIMAL(4,1)} \\
+    \end{tabular}
+};
+
+% Entidade Mestre Esquerda: ALUNO
+\node[tablebox, left=1.2cm of matricula] (aluno) {
+    \begin{tabular}{ll}
+    \multicolumn{2}{c}{\textbf{\color{editorablue!90!black}aluno}} \\
+    \hline
+    \textbf{\color{editorablue!90!black}PK} & \underline{\texttt{id\_aluno}} \\
+    & \texttt{cpf} \\
+    & \texttt{nome} \\
+    \end{tabular}
+};
+
+% Entidade Mestre Direita: TURMA
+\node[tablebox, right=1.2cm of matricula] (turma) {
+    \begin{tabular}{ll}
+    \multicolumn{2}{c}{\textbf{\color{editorablue!90!black}turma}} \\
+    \hline
+    \textbf{\color{editorablue!90!black}PK} & \underline{\texttt{id\_turma}} \\
+    & \texttt{nome} \\
+    \end{tabular}
+};
+
+% Conexoes FK de MATRICULA
+\draw[fkarrow] (matricula.west) -- (aluno.east)
+    node[midway, above, font=\tiny\bfseries] {FK (N:1)};
+\draw[fkarrow] (matricula.east) -- (turma.west)
+    node[midway, above, font=\tiny\bfseries] {FK (N:1)};
+
+% Conexoes FK de NOTA
+\draw[fkarrow] (nota.west) -| ($(aluno.south)!0.5!(aluno.south east)$)
+    node[pos=0.25, below, font=\tiny\bfseries] {FK (N:1)};
+\draw[fkarrow] (nota.east) -| ($(turma.south)!0.5!(turma.south west)$)
+    node[pos=0.25, below, font=\tiny\bfseries] {FK (N:1)};
+
+% Bloco da Consulta e Papeis RBAC
+\node[querybox, below=0.9cm of nota, text width=13.5cm] (query_acad) {
+    \textbf{\color{green!50!black}Consulta Relacional com Junção Múltipla para Boletim Escolar:}\\[0.2em]
+    \texttt{\textbf{SELECT} a.nome AS aluno, t.nome AS turma, n.valor AS nota}\\
+    \texttt{\textbf{FROM} matricula m \textbf{JOIN} aluno a \textbf{ON} m.id\_aluno = a.id\_aluno}\\
+    \texttt{\textbf{JOIN} turma t \textbf{ON} m.id\_turma = t.id\_turma \textbf{LEFT JOIN} nota n \textbf{ON} (n.id\_aluno = a.id\_aluno \textbf{AND} n.id\_turma = t.id\_turma);}\\[0.4em]
+    \textbf{\color{editorablue!90!black}Matriz de Papéis RBAC:} \
+    \textbf{\texttt{r\_secretaria}}: DML completo em \texttt{aluno, matricula, turma}; \
+    \textbf{\texttt{r\_professor}}: Leitura em \texttt{aluno} e Escrita em \texttt{nota}; \
+    \textbf{\texttt{r\_aluno}}: Leitura restrita em \texttt{nota}.
+};
+
+\end{tikzpicture}
+\caption{Modelagem relacional de chaves estrangeiras, junção múltipla e zonas de autorização RBAC.}
+\label{fig:rbac_academic_schema}
+\end{figure}
 
 \newpage
 

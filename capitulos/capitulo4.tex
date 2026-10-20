@@ -170,6 +170,85 @@ SELECT * FROM analise_pseudonimizada;
 
 O relatório expõe apenas códigos abstratos e a cidade, eliminando o risco de exposição de nomes e documentos civis em relatórios gerenciais.
 
+\subsection*{4.4. Modelagem Diagramática da Pseudonimização em TikZ}
+
+A separação lógica entre os identificadores civis do titular e os dados utilizados para relatórios estatísticos é assegurada pela integridade referencial. A consulta da visão \texttt{analise\_pseudonimizada} realiza a junção (\texttt{JOIN}) com a tabela satélite através da chave estrangeira \texttt{id\_titular}, mas projeta exclusivamente o código pseudonimizado e o atributo demográfico não identificável, conforme esquematizado na Figura \ref{fig:pseudonimo_join_view}.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=1.2cm and 2.0cm,
+    every node/.style={font=\small},
+    tablebox/.style={
+        draw=editorablue!80!black,
+        rounded corners=4pt,
+        line width=0.9pt,
+        fill=blue!3,
+        inner sep=4pt
+    },
+    querybox/.style={
+        draw=green!60!black,
+        rounded corners=4pt,
+        line width=0.8pt,
+        fill=green!4,
+        inner sep=5pt,
+        font=\footnotesize
+    },
+    fkarrow/.style={
+        -{Stealth[length=2.5mm, width=1.8mm]},
+        line width=1.1pt,
+        draw=editorablue!90!black
+    }
+]
+
+% Tabela Mestre: TITULAR
+\node[tablebox] (titular) {
+    \begin{tabular}{ll}
+    \multicolumn{2}{c}{\textbf{\color{editorablue!90!black}titular} \ \footnotesize(Base de Identificação)} \\
+    \hline
+    \textbf{\color{editorablue!90!black}PK} & \underline{\texttt{id\_titular}} : \texttt{INT} \\
+    & \texttt{nome} : \texttt{VARCHAR(80)} \textit{\scriptsize(PII Direto)} \\
+    & \texttt{cpf} : \texttt{CHAR(11)} \textit{\scriptsize(PII Direto)} \\
+    & \texttt{email} : \texttt{VARCHAR(100)} \\
+    & \textbf{\color{green!50!black}\texttt{cidade}} : \texttt{VARCHAR(40)} \textit{\scriptsize(Analítico)} \\
+    & \texttt{saude} : \texttt{VARBINARY(255)} \textit{\scriptsize(Sensível)} \\
+    \end{tabular}
+};
+
+% Tabela Satelite: MAPA_PSEUDONIMO
+\node[tablebox, right=2.0cm of titular] (mapa) {
+    \begin{tabular}{ll}
+    \multicolumn{2}{c}{\textbf{\color{editorablue!90!black}mapa\_pseudonimo} \ \footnotesize(Segredo Mapeado)} \\
+    \hline
+    \textbf{\color{editorablue!90!black}PK} & \textbf{\color{green!50!black}\underline{\texttt{codigo}}} : \texttt{CHAR(10)} \\
+    \textbf{\color{red!70!black}FK} & \textbf{\texttt{id\_titular}} : \texttt{INT} \ \textit{\scriptsize(UNIQUE)} \\
+    \end{tabular}
+};
+
+% Seta de FK com ON DELETE CASCADE
+\draw[fkarrow] (mapa.west) -- (titular.east)
+    node[midway, above, font=\scriptsize\bfseries, color=editorablue!90!black] {REFERENCES (1 : 1)}
+    node[midway, below, font=\tiny, color=red!70!black] {ON DELETE CASCADE};
+
+% Bloco da Visao Resultante da Juncao
+\node[querybox, below=1.2cm of $(titular.south)!0.5!(mapa.south)$, text width=11.5cm] (view_pseudo) {
+    \textbf{\color{green!50!black}Consulta com Junção da Visão (\texttt{analise\_pseudonimizada}):}\\[0.2em]
+    \texttt{\textbf{CREATE VIEW} analise\_pseudonimizada \textbf{AS}}\\
+    \texttt{\textbf{SELECT} m.codigo, t.cidade}\\
+    \texttt{\textbf{FROM} titular t \textbf{JOIN} mapa\_pseudonimo m \textbf{USING} (id\_titular);}\\[0.3em]
+    \textbf{\color{editorablue!90!black}Garantia LGPD:} O analista correlaciona cidades sem expor nomes civis ou CPFs.
+};
+
+\draw[-{Stealth[length=2mm]}, dashed, color=gray!60, line width=0.8pt] 
+    (titular.south) -- ++(0,-0.4) -| ($(view_pseudo.north west)!0.28!(view_pseudo.north east)$);
+\draw[-{Stealth[length=2mm]}, dashed, color=gray!60, line width=0.8pt] 
+    (mapa.south) -- ++(0,-0.4) -| ($(view_pseudo.north west)!0.72!(view_pseudo.north east)$);
+
+\end{tikzpicture}
+\caption{Modelagem relacional de chave estrangeira com \texttt{CASCADE} e consulta de junção para pseudonimização analítica.}
+\label{fig:pseudonimo_join_view}
+\end{figure}
+
 \newpage
 
 \section*{5. ANONIMIZAÇÃO DEFINITIVA E MASCARAMENTO DINÂMICO}

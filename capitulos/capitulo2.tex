@@ -95,6 +95,89 @@ DELETE FROM curso WHERE id_curso = 1;
 
 O SGBD cancelou a operação com o Erro 1451, impedindo que o aluno Marcos Silva ficasse órfão no sistema institucional.
 
+\subsection*{3.3. Consultas com Junção e Modelagem Diagramática em TikZ}
+
+Para recuperar os dados combinados de ambas as tabelas preservando a coerência referencial, executa-se uma consulta com junção (\texttt{INNER JOIN}). O SGBD utiliza a chave estrangeira como predicado lógico para correlacionar cada matrícula ao respectivo curso:
+
+\begin{lstlisting}
+-- Consulta relacional unindo a tabela mestre e a tabela dependente
+SELECT c.nome AS curso, m.aluno_nome
+FROM curso c
+INNER JOIN matricula_curso m ON c.id_curso = m.id_curso;
+\end{lstlisting}
+
+A Figura \ref{fig:fk_curso_matricula} ilustra a modelagem relacional entre as tabelas e o fluxo lógico da consulta com junção estruturado em TikZ.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=1.2cm and 2.0cm,
+    every node/.style={font=\small},
+    tablebox/.style={
+        draw=editorablue!80!black,
+        rounded corners=4pt,
+        line width=0.9pt,
+        fill=blue!3,
+        inner sep=4pt
+    },
+    querybox/.style={
+        draw=green!60!black,
+        rounded corners=4pt,
+        line width=0.8pt,
+        fill=green!4,
+        inner sep=5pt,
+        font=\footnotesize
+    },
+    fkarrow/.style={
+        -{Stealth[length=2.5mm, width=1.8mm]},
+        line width=1.1pt,
+        draw=editorablue!90!black
+    }
+]
+
+% Tabela Pai: CURSO
+\node[tablebox] (curso) {
+    \begin{tabular}{ll}
+    \multicolumn{2}{c}{\textbf{\color{editorablue!90!black}curso} \ \footnotesize(Tabela Pai)} \\
+    \hline
+    \textbf{\color{editorablue!90!black}PK} & \underline{\texttt{id\_curso}} : \texttt{INT} \\
+    & \texttt{nome} : \texttt{VARCHAR(60)} \\
+    \end{tabular}
+};
+
+% Tabela Filha: MATRICULA_CURSO
+\node[tablebox, right=2.0cm of curso] (matricula) {
+    \begin{tabular}{ll}
+    \multicolumn{2}{c}{\textbf{\color{editorablue!90!black}matricula\_curso} \ \footnotesize(Tabela Filha)} \\
+    \hline
+    \textbf{\color{editorablue!90!black}PK} & \underline{\texttt{id\_matricula}} : \texttt{INT} \\
+    \textbf{\color{red!70!black}FK} & \textbf{\texttt{id\_curso}} : \texttt{INT} \\
+    & \texttt{aluno\_nome} : \texttt{VARCHAR(80)} \\
+    \end{tabular}
+};
+
+% Seta de Integridade Referencial (FK -> PK)
+\draw[fkarrow] (matricula.west) -- (curso.east)
+    node[midway, above, font=\scriptsize\bfseries, color=editorablue!90!black] {REFERENCES (1 : N)}
+    node[midway, below, font=\tiny, color=black!70] {ON DELETE RESTRICT};
+
+% Bloco da Consulta com Juncao
+\node[querybox, below=1.0cm of $(curso.south)!0.5!(matricula.south)$, text width=11.5cm] (query) {
+    \textbf{\color{green!50!black}Consulta Relacional com Junção (\texttt{INNER JOIN}):}\\[0.2em]
+    \texttt{\textbf{SELECT} c.nome AS curso, m.aluno\_nome}\\
+    \texttt{\textbf{FROM} curso c \textbf{INNER JOIN} matricula\_curso m \textbf{ON} c.id\_curso = m.id\_curso;}
+};
+
+\draw[-{Stealth[length=2mm]}, dashed, color=gray!60, line width=0.8pt] 
+    (curso.south) -- ++(0,-0.3) -| ($(query.north west)!0.28!(query.north east)$);
+\draw[-{Stealth[length=2mm]}, dashed, color=gray!60, line width=0.8pt] 
+    (matricula.south) -- ++(0,-0.3) -| ($(query.north west)!0.72!(query.north east)$);
+
+\end{tikzpicture}
+\caption{Modelagem relacional de chave estrangeira e consulta de junção entre \texttt{curso} e \texttt{matricula\_curso}.}
+\label{fig:fk_curso_matricula}
+\end{figure}
+
 \newpage
 
 \section*{4. ARQUITETURA E PROGRAMAÇÃO DE GATILHOS (TRIGGERS)}
@@ -243,6 +326,95 @@ VALUES (999, '2026-10-15', 100.00);
 INSERT INTO pedido (id_cliente, data_pedido, valor)
 VALUES (1, '2026-10-15', -50.00);
 \end{lstlisting}
+
+\subsection*{6.4. Consulta de Faturamento com Junção e Modelagem Diagramática em TikZ}
+
+A conciliação comercial e a emissão de relatórios de vendas exigem cruzar os registros da tabela mestre \texttt{cliente} com a tabela dependente \texttt{pedido}. O predicado de junção fundamenta-se estritamente na correspondência entre chave primária e estrangeira (\texttt{c.id\_cliente = p.id\_cliente}):
+
+\begin{lstlisting}
+-- Relatorio de faturamento unindo clientes e seus respectivos pedidos
+SELECT c.nome AS cliente,
+       p.id_pedido,
+       p.data_pedido,
+       p.valor,
+       p.status
+FROM cliente c
+INNER JOIN pedido p ON c.id_cliente = p.id_cliente;
+\end{lstlisting}
+
+A Figura \ref{fig:fk_cliente_pedido} ilustra o diagrama de relacionamento e o plano lógico da consulta com junção elaborado em TikZ.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=1.2cm and 2.0cm,
+    every node/.style={font=\small},
+    tablebox/.style={
+        draw=editorablue!80!black,
+        rounded corners=4pt,
+        line width=0.9pt,
+        fill=blue!3,
+        inner sep=4pt
+    },
+    querybox/.style={
+        draw=green!60!black,
+        rounded corners=4pt,
+        line width=0.8pt,
+        fill=green!4,
+        inner sep=5pt,
+        font=\footnotesize
+    },
+    fkarrow/.style={
+        -{Stealth[length=2.5mm, width=1.8mm]},
+        line width=1.1pt,
+        draw=editorablue!90!black
+    }
+]
+
+% Tabela Pai: CLIENTE
+\node[tablebox] (cliente) {
+    \begin{tabular}{ll}
+    \multicolumn{2}{c}{\textbf{\color{editorablue!90!black}cliente} \ \footnotesize(Tabela Mestre)} \\
+    \hline
+    \textbf{\color{editorablue!90!black}PK} & \underline{\texttt{id\_cliente}} : \texttt{INT} \\
+    & \texttt{nome} : \texttt{VARCHAR(80)} \\
+    \end{tabular}
+};
+
+% Tabela Filha: PEDIDO
+\node[tablebox, right=2.0cm of cliente] (pedido) {
+    \begin{tabular}{ll}
+    \multicolumn{2}{c}{\textbf{\color{editorablue!90!black}pedido} \ \footnotesize(Tabela Dependente)} \\
+    \hline
+    \textbf{\color{editorablue!90!black}PK} & \underline{\texttt{id\_pedido}} : \texttt{INT} \\
+    \textbf{\color{red!70!black}FK} & \textbf{\texttt{id\_cliente}} : \texttt{INT} \\
+    & \texttt{data\_pedido} : \texttt{DATE} \\
+    & \texttt{valor} : \texttt{DECIMAL(10,2)} \\
+    & \texttt{status} : \texttt{VARCHAR(15)} \\
+    \end{tabular}
+};
+
+% Seta de Integridade Referencial (FK -> PK)
+\draw[fkarrow] (pedido.west |- cliente.center) -- (cliente.east |- cliente.center)
+    node[midway, above, font=\scriptsize\bfseries, color=editorablue!90!black] {REFERENCES (1 : N)}
+    node[midway, below, font=\tiny, color=black!70] {ON DELETE RESTRICT};
+
+% Bloco da Consulta com Juncao
+\node[querybox, below=1.2cm of $(cliente.south)!0.5!(pedido.south)$, text width=11.5cm] (query_pedido) {
+    \textbf{\color{green!50!black}Consulta Relacional com Junção (\texttt{INNER JOIN}):}\\[0.2em]
+    \texttt{\textbf{SELECT} c.nome AS cliente, p.id\_pedido, p.data\_pedido, p.valor}\\
+    \texttt{\textbf{FROM} cliente c \textbf{INNER JOIN} pedido p \textbf{ON} c.id\_cliente = p.id\_cliente;}
+};
+
+\draw[-{Stealth[length=2mm]}, dashed, color=gray!60, line width=0.8pt] 
+    (cliente.south) -- ++(0,-0.4) -| ($(query_pedido.north west)!0.28!(query_pedido.north east)$);
+\draw[-{Stealth[length=2mm]}, dashed, color=gray!60, line width=0.8pt] 
+    (pedido.south) -- ++(0,-0.4) -| ($(query_pedido.north west)!0.72!(query_pedido.north east)$);
+
+\end{tikzpicture}
+\caption{Modelagem relacional de integridade referencial e junção entre \texttt{cliente} e \texttt{pedido}.}
+\label{fig:fk_cliente_pedido}
+\end{figure}
 
 \newpage
 

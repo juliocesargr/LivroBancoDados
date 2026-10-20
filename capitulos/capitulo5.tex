@@ -151,6 +151,117 @@ FROM log_auditoria;
 
 \noindent \textbf{Nota Técnica sobre Consultas (SELECT):} Em SQL, gatilhos padrão disparam apenas mediante instruções DML de alteração (\texttt{INSERT}, \texttt{UPDATE}, \texttt{DELETE}). O monitoramento de consultas \texttt{SELECT} envolvendo dados altamente confidenciais deve ser viabilizado por meio do plugin de auditoria do SGBD (como o \textit{MySQL Enterprise Audit}) ou por logs de aplicação integrados ao servidor web.
 
+\subsection*{4.4. Consulta de Auditoria com Junção e Modelagem em TikZ}
+
+Para fins de prestação de contas perante a ANPD, uma auditoria técnica frequentemente necessita associar o registro de modificação da tabela \texttt{log\_auditoria} aos dados cadastrais do titular na tabela \texttt{titular}. A consulta relacional com junção a seguir reconstrói o histórico do evento:
+
+\begin{lstlisting}
+-- Reconstrucao da trilha de auditoria cruzando o evento com o titular
+SELECT l.data_hora,
+       l.usuario,
+       l.acao,
+       t.nome,
+       t.cpf
+FROM log_auditoria l
+INNER JOIN titular t ON l.id_titular = t.id_titular;
+\end{lstlisting}
+
+A Figura \ref{fig:audit_join_view} ilustra em TikZ a arquitetura do gatilho e a consulta com junção entre a trilha de auditoria e a tabela mestre.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=1.2cm and 2.0cm,
+    every node/.style={font=\small},
+    tablebox/.style={
+        draw=editorablue!80!black,
+        rounded corners=4pt,
+        line width=0.9pt,
+        fill=blue!3,
+        inner sep=4pt
+    },
+    querybox/.style={
+        draw=green!60!black,
+        rounded corners=4pt,
+        line width=0.8pt,
+        fill=green!4,
+        inner sep=5pt,
+        font=\footnotesize
+    },
+    trigbox/.style={
+        draw=orange!80!black,
+        rounded corners=4pt,
+        line width=0.9pt,
+        fill=orange!6,
+        inner sep=4pt,
+        font=\footnotesize,
+        align=center
+    },
+    flowarrow/.style={
+        -{Stealth[length=2.5mm, width=1.8mm]},
+        line width=1.1pt,
+        draw=editorablue!90!black
+    }
+]
+
+% Tabela Mestre: TITULAR
+\node[tablebox] (titular) {
+    \begin{tabular}{ll}
+    \multicolumn{2}{c}{\textbf{\color{editorablue!90!black}titular} \ \footnotesize(Tabela Mestre)} \\
+    \hline
+    \textbf{\color{editorablue!90!black}PK} & \underline{\texttt{id\_titular}} : \texttt{INT} \\
+    & \texttt{nome} : \texttt{VARCHAR(80)} \\
+    & \texttt{cpf} : \texttt{CHAR(11)} \\
+    & \texttt{email} : \texttt{VARCHAR(100)} \\
+    \end{tabular}
+};
+
+% Tabela: LOG_AUDITORIA
+\node[tablebox, right=2.0cm of titular] (log) {
+    \begin{tabular}{ll}
+    \multicolumn{2}{c}{\textbf{\color{editorablue!90!black}log\_auditoria} \ \footnotesize(Trilha Append-Only)} \\
+    \hline
+    \textbf{\color{editorablue!90!black}PK} & \underline{\texttt{id}} : \texttt{INT} \\
+    & \texttt{usuario} : \texttt{VARCHAR(100)} \\
+    & \texttt{acao} : \texttt{VARCHAR(10)} \\
+    \textbf{\color{red!70!black}REF} & \textbf{\texttt{id\_titular}} : \texttt{INT} \\
+    & \texttt{data\_hora} : \texttt{DATETIME} \\
+    \end{tabular}
+};
+
+% Gatilho intermediario
+\node[trigbox, above=0.7cm of $(titular.north)!0.5!(log.north)$] (gatilho) {
+    \textbf{\color{orange!80!black}Gatilho Automático:} \texttt{AFTER UPDATE ON titular} \\
+    \scriptsize Dispara: \texttt{INSERT INTO log\_auditoria (..., NEW.id\_titular)}
+};
+
+\draw[-{Stealth[length=2mm]}, line width=1pt, draw=orange!80!black]
+    (titular.north) |- (gatilho.west);
+\draw[-{Stealth[length=2mm]}, line width=1pt, draw=orange!80!black]
+    (gatilho.east) -| (log.north);
+
+% Conexao de Juncao (FK/REF)
+\draw[flowarrow] (log.west) -- (titular.east)
+    node[midway, above, font=\scriptsize\bfseries, color=editorablue!90!black] {Junção (\texttt{ON l.id\_titular = t.id\_titular})}
+    node[midway, below, font=\tiny, color=black!70] {Rastreabilidade Temporal};
+
+% Bloco da Consulta com Juncao
+\node[querybox, below=1.2cm of $(titular.south)!0.5!(log.south)$, text width=11.5cm] (query_audit) {
+    \textbf{\color{green!50!black}Consulta com Junção para Evidência Regulatória (LGPD):}\\[0.2em]
+    \texttt{\textbf{SELECT} l.data\_hora, l.usuario, l.acao, t.nome, t.cpf}\\
+    \texttt{\textbf{FROM} log\_auditoria l \textbf{INNER JOIN} titular t \textbf{ON} l.id\_titular = t.id\_titular;}
+};
+
+\draw[-{Stealth[length=2mm]}, dashed, color=gray!60, line width=0.8pt] 
+    (titular.south) -- ++(0,-0.4) -| ($(query_audit.north west)!0.28!(query_audit.north east)$);
+\draw[-{Stealth[length=2mm]}, dashed, color=gray!60, line width=0.8pt] 
+    (log.south) -- ++(0,-0.4) -| ($(query_audit.north west)!0.72!(query_audit.north east)$);
+
+\end{tikzpicture}
+\caption{Modelagem em TikZ do gatilho de auditoria contínua e da consulta com junção para rastreabilidade.}
+\label{fig:audit_join_view}
+\end{figure}
+
 \newpage
 
 \section*{5. ATENDIMENTO TEMPESTIVO AOS DIREITOS DOS TITULARES}
@@ -219,6 +330,93 @@ WHERE cpf = '22222222222';
 SELECT * FROM mapa_pseudonimo WHERE id_titular = 2; -- Retorna zero registros!
 SELECT * FROM titular WHERE cpf = '22222222222';     -- Registro eliminado!
 \end{lstlisting}
+
+\subsection*{5.5.1. Modelagem Diagramática da Eliminação com Propagação em Cascata}
+
+A conformidade com o direito à eliminação (art. 18, VI da LGPD) depende intrinsecamente da integridade referencial configurada no banco de dados. A Figura \ref{fig:cascade_delete_view} demonstra em TikZ como a instrução \texttt{DELETE} na tabela mestre propaga-se automaticamente pela chave estrangeira com \texttt{ON DELETE CASCADE}, eliminando o vínculo na tabela \texttt{mapa\_pseudonimo} sem deixar registros órfãos ou dados residuais.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=1.2cm and 2.0cm,
+    every node/.style={font=\small},
+    tablebox/.style={
+        draw=editorablue!80!black,
+        rounded corners=4pt,
+        line width=0.9pt,
+        fill=blue!3,
+        inner sep=4pt
+    },
+    delbox/.style={
+        draw=red!80!black,
+        rounded corners=4pt,
+        line width=0.9pt,
+        fill=red!6,
+        inner sep=5pt,
+        font=\footnotesize,
+        align=center
+    },
+    cascade_arrow/.style={
+        -{Stealth[length=2.5mm, width=1.8mm]},
+        line width=1.2pt,
+        draw=red!80!black
+    }
+]
+
+% Tabela Mestre: TITULAR
+\node[tablebox] (titular) {
+    \begin{tabular}{ll}
+    \multicolumn{2}{c}{\textbf{\color{editorablue!90!black}titular} \ \footnotesize(Tabela Mestre)} \\
+    \hline
+    \textbf{\color{editorablue!90!black}PK} & \underline{\texttt{id\_titular}} : \texttt{INT} \\
+    & \texttt{nome} : \texttt{VARCHAR(80)} \\
+    & \texttt{cpf} : \texttt{CHAR(11)} \\
+    & \texttt{email} : \texttt{VARCHAR(100)} \\
+    \end{tabular}
+};
+
+% Tabela Dependente: MAPA_PSEUDONIMO
+\node[tablebox, right=2.0cm of titular] (mapa) {
+    \begin{tabular}{ll}
+    \multicolumn{2}{c}{\textbf{\color{editorablue!90!black}mapa\_pseudonimo} \ \footnotesize(Tabela Satélite)} \\
+    \hline
+    \textbf{\color{editorablue!90!black}PK} & \underline{\texttt{codigo}} : \texttt{CHAR(10)} \\
+    \textbf{\color{red!70!black}FK} & \textbf{\texttt{id\_titular}} : \texttt{INT} \\
+    \end{tabular}
+};
+
+% Operacao DELETE no Titular
+\node[delbox, above=0.7cm of titular] (cmd_del) {
+    \textbf{\color{red!80!black}Instrução DML de Eliminação:}\\[0.1em]
+    \texttt{\textbf{DELETE FROM} titular \textbf{WHERE} cpf = '22222222222';}
+};
+
+\draw[-{Stealth[length=2mm]}, line width=1pt, draw=red!80!black]
+    (cmd_del.south) -- (titular.north)
+    node[midway, right, font=\tiny] {Exclusão mestre};
+
+% Seta de Cascata (CASCADE)
+\draw[cascade_arrow] (titular.east) -- (mapa.west)
+    node[midway, above, font=\scriptsize\bfseries, color=red!80!black] {\texttt{ON DELETE CASCADE}}
+    node[midway, below, font=\tiny, color=black!70] {Propagação automática via FK};
+
+% Bloco de Verificacao da Eliminacao
+\node[tablebox, fill=gray!5, below=1.2cm of $(titular.south)!0.5!(mapa.south)$, text width=11.5cm] (res_conf) {
+    \textbf{\color{editorablue!90!black}Verificação Pós-Eliminação (Direito ao Esquecimento - LGPD):}\\[0.2em]
+    \texttt{\textbf{SELECT} * \textbf{FROM} mapa\_pseudonimo \textbf{WHERE} id\_titular = 2;} $\to$ \textbf{Zero registros retornados!}\\
+    \texttt{\textbf{SELECT} * \textbf{FROM} titular \textbf{WHERE} cpf = '22222222222';} $\to$ \textbf{Registro eliminado definitivamente!}\\[0.3em]
+    \footnotesize\textit{O motor relacional garante que nenhum resíduo de dado pessoal permaneça vinculado ao titular extinto.}
+};
+
+\draw[-{Stealth[length=2mm]}, dashed, color=gray!60, line width=0.8pt] 
+    (titular.south) -- ++(0,-0.4) -| ($(res_conf.north west)!0.28!(res_conf.north east)$);
+\draw[-{Stealth[length=2mm]}, dashed, color=gray!60, line width=0.8pt] 
+    (mapa.south) -- ++(0,-0.4) -| ($(res_conf.north west)!0.72!(res_conf.north east)$);
+
+\end{tikzpicture}
+\caption{Modelagem em TikZ da propagação em cascata (\texttt{ON DELETE CASCADE}) para atendimento ao direito de eliminação da LGPD.}
+\label{fig:cascade_delete_view}
+\end{figure}
 
 \newpage
 
